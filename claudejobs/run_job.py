@@ -89,7 +89,8 @@ def build_claude_argv(job: dict, *, settings, jobctl_command: str) -> list[str]:
         job_timeout_minutes=job.get("timeout_minutes") or settings.job_timeout_minutes,
     )
     if job.get("append_system_prompt"):
-        instructions = f"{instructions}\n\n## Extra instructions for this job\n\n{job['append_system_prompt']}"
+        instructions = (f"{instructions}\n\n## Extra instructions for this job\n\n"
+                        f"{job['append_system_prompt']}")
 
     prompt = job["prompt"]
     if single_line_args:

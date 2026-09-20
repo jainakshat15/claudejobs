@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a capability or a change in behaviour
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation that prompted this, rather than the solution you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried or considered
+      description: Existing settings or commands that nearly work, and where they fall short.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Which part does this touch?
+      options:
+        - label: Queue and dispatcher
+        - label: HTTP API
+        - label: Telegram bot
+        - label: Slack bot
+        - label: Job launching (terminals, Claude CLI)
+        - label: Documentation

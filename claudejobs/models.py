@@ -115,9 +115,11 @@ def job_detail(job: Mapping[str, Any], *, questions: list[Mapping[str, Any]] | N
         f"{icon(job['status'])} Job #{job['id']} — {job['status']}",
         f"title:     {job.get('title') or short(job.get('prompt'), 60)}",
         f"directory: {job.get('directory')}",
-        f"model:     {job.get('model') or 'default'}   permissions: {job.get('permission_mode') or 'default'}",
+        f"model:     {job.get('model') or 'default'}   "
+        f"permissions: {job.get('permission_mode') or 'default'}",
         f"priority:  {job.get('priority')}   attempt {job.get('attempts')}/{job.get('max_attempts')}",
-        f"created:   {_age(job.get('created_at'))} by {job.get('source_username') or job.get('created_by') or 'unknown'}"
+        f"created:   {_age(job.get('created_at'))} by "
+        f"{job.get('source_username') or job.get('created_by') or 'unknown'}"
         f" via {job.get('source')}",
     ]
     if job.get("started_at"):

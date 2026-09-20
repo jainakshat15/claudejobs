@@ -14,7 +14,7 @@ import hashlib
 import logging
 import secrets
 from datetime import datetime
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from psycopg.types.json import Json
 

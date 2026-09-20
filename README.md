@@ -1,7 +1,17 @@
 # claudejobs
 
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
 Queue Claude Code sessions in Postgres and run them on one always-on machine,
 driven from Telegram or Slack.
+
+> **This runs code on your machine from a chat message.** Jobs start with
+> `bypassPermissions` by default, which means Claude executes commands without
+> stopping to ask — that is what makes unattended operation work, and it is also
+> the whole risk. Keep the API on `127.0.0.1`, set `ALLOWED_ROOTS`, keep the bot
+> allowlists short, and read [SECURITY.md](SECURITY.md) before you install it.
 
 You send a prompt from your phone. A job goes into Postgres. A dispatcher on the
 laptop picks it up, opens a terminal, and runs Claude Code in the directory you
@@ -103,6 +113,8 @@ phone you can also do with curl or the CLI.
 | [docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md) | Creating the bot and the allowlist |
 | [docs/SLACK_SETUP.md](docs/SLACK_SETUP.md) | Slack app, Socket Mode, scopes |
 | [deploy/README.md](deploy/README.md) | Running it 24/7 as a service |
+| [SECURITY.md](SECURITY.md) | What this software can do, and how to fence it in |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Running the tests, and what a good change looks like |
 
 ## Layout
 

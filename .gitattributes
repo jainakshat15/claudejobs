@@ -1,0 +1,17 @@
+# Normalise line endings so a Linux worker and a Windows workstation agree.
+* text=auto eol=lf
+
+# Windows-only files must keep CRLF: cmd.exe mis-parses LF batch files.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell scripts and unit files must keep LF, even when checked out on Windows.
+*.sh  text eol=lf
+*.service text eol=lf
+
+# Never touched.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

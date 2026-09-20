@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import re
 import threading
-import time
 from typing import Any
 
 from slack_bolt import App

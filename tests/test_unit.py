@@ -7,7 +7,13 @@ import os
 import pytest
 
 from claudejobs import models, request_log
-from claudejobs.bots.common import ASSIGNMENT_RE, OPTION_RE, RUN_OPTIONS, _pop_options, parse_message
+from claudejobs.bots.common import (
+    ASSIGNMENT_RE,
+    OPTION_RE,
+    RUN_OPTIONS,
+    _pop_options,
+    parse_message,
+)
 from claudejobs.prompt import build_job_instructions
 
 

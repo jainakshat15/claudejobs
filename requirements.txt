@@ -1,13 +1,20 @@
-# Runtime dependencies. Install with:  pip install -r requirements.txt
-# (or `pip install -e .` which reads pyproject.toml instead)
+# Pinned to the versions this release was tested against.
+#   pip install -r requirements.txt
+#
+# pyproject.toml carries the looser ranges for `pip install -e .`. To move the
+# pins forward: upgrade, run the full test suite (see CONTRIBUTING.md), then
+# update these lines.
 
-fastapi>=0.110
-uvicorn>=0.27
-psycopg[binary,pool]>=3.1
-pydantic>=2.6
-python-dotenv>=1.0
-httpx>=0.26
+fastapi==0.141.1
+starlette==1.6.0            # pinned explicitly: the request-log middleware depends on its streaming behaviour
+uvicorn==0.52.4
+psycopg[binary,pool]==3.3.6
+psycopg-pool==3.3.2
+pydantic==2.13.5
+python-dotenv==1.2.3
+httpx==0.28.1
 
 # Bots — drop either line if you only use one chat platform.
-python-telegram-bot>=21.0
-slack-bolt>=1.18
+python-telegram-bot==22.8
+slack-bolt==1.30.0
+slack-sdk==3.44.1

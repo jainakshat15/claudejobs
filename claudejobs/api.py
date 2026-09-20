@@ -28,7 +28,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
-from . import db, models, repository as repo, request_log
+from . import db, models, request_log
+from . import repository as repo
 from .config import ConfigError, get_settings, setup_logging
 
 log = logging.getLogger("claudejobs.api")
@@ -41,7 +42,8 @@ QUESTION_POLL_SECONDS = 1.5
 # --------------------------------------------------------------------------- #
 class CreateJob(BaseModel):
     prompt: str = Field(min_length=1, description="The opening prompt for Claude")
-    directory: str | None = Field(default=None, description="Where Claude runs; defaults to DEFAULT_DIRECTORY")
+    directory: str | None = Field(default=None,
+                                  description="Where Claude runs; defaults to DEFAULT_DIRECTORY")
     title: str | None = Field(default=None, max_length=200)
     model: str | None = None
     permission_mode: str | None = None
@@ -365,7 +367,7 @@ def update_job(job_id: int, payload: UpdateJob) -> dict:
                 detail=f"job #{job_id} is {job['status']}; only queued jobs can be edited. "
                        "Cancel it and submit a new one.",
             )
-        updated = repo.update_job(conn, job_id, updates, actor=str(payload.model_dump().get("actor") or "api"))
+        updated = repo.update_job(conn, job_id, updates, actor="api")
         if updated is None:
             raise HTTPException(status_code=409, detail=f"job #{job_id} started before the edit landed")
     return _public(updated)

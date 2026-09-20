@@ -24,7 +24,6 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 from . import models
 from .config import REPO_ROOT, ConfigError, get_settings, setup_logging

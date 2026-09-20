@@ -21,7 +21,8 @@ import time
 import uuid
 from types import FrameType
 
-from . import db, models, repository as repo
+from . import db, models
+from . import repository as repo
 from .config import ConfigError, get_settings, setup_logging
 from .launcher import LaunchError, cleanup_old_scripts, launch_job
 
