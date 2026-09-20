@@ -1,0 +1,14 @@
+[Unit]
+Description=claudejobs Slack bot (Socket Mode)
+After=claudejobs-api.service
+Wants=claudejobs-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/claude-server
+ExecStart=%h/claude-server/.venv/bin/python -m claudejobs slack
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,27 @@
+# Secrets — never commit. Copy .env.example to .env instead.
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts
+logs/
+requests.md
+*.log
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,20 @@
+[Unit]
+Description=claudejobs dispatcher (claims jobs and launches Claude Code sessions)
+Documentation=file:///opt/claudejobs/docs/OPERATIONS.md
+After=claudejobs-api.service
+Wants=claudejobs-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/claude-server
+ExecStart=%h/claude-server/.venv/bin/python -m claudejobs dispatcher
+Restart=always
+RestartSec=5
+# Jobs open a terminal window per job, which needs a graphical session. On a
+# headless server set TERMINAL_MODE=headless in .env, or uncomment:
+#Environment=TERMINAL_MODE=headless
+# For terminal mode on a desktop session, the display must be reachable:
+#Environment=DISPLAY=:0
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,13 @@
+# Runtime dependencies. Install with:  pip install -r requirements.txt
+# (or `pip install -e .` which reads pyproject.toml instead)
+
+fastapi>=0.110
+uvicorn>=0.27
+psycopg[binary,pool]>=3.1
+pydantic>=2.6
+python-dotenv>=1.0
+httpx>=0.26
+
+# Bots — drop either line if you only use one chat platform.
+python-telegram-bot>=21.0
+slack-bolt>=1.18

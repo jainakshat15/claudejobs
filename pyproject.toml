@@ -1,0 +1,36 @@
+[project]
+name = "claudejobs"
+version = "1.0.0"
+description = "Postgres-backed job queue that runs Claude Code sessions, driven from Telegram or Slack"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "psycopg[binary,pool]>=3.1",
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+    "httpx>=0.26",
+    "python-telegram-bot>=21.0",
+    "slack-bolt>=1.18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+# Operator entry point: migrate / api / dispatcher / telegram / slack / submit ...
+claudejobs = "claudejobs.__main__:main"
+# The tiny CLI a running Claude session uses to talk to the queue.
+jobctl = "claudejobs.jobctl:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["claudejobs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

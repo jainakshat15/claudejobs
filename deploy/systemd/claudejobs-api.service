@@ -1,0 +1,18 @@
+[Unit]
+Description=claudejobs API
+Documentation=file:///opt/claudejobs/docs/OPERATIONS.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust to where you cloned the repo.
+WorkingDirectory=%h/claude-server
+ExecStart=%h/claude-server/.venv/bin/python -m claudejobs api
+Restart=always
+RestartSec=5
+# Settings come from .env in WorkingDirectory; anything set here overrides it.
+#Environment=LOG_LEVEL=DEBUG
+
+[Install]
+WantedBy=default.target
