@@ -105,6 +105,7 @@ also do with `curl` (see `docs/API.md`). Aliases are interchangeable.
 | Command | Aliases | What it does | HTTP route |
 | --- | --- | --- | --- |
 | `/run <prompt>` | `/new` | Queue a job. Options may precede the prompt (see below). | `POST /jobs` |
+| `/ask-sales-bot <question>` | `/ask`, `/salesbot` | Answer a question about the Sales Bot product from its source and its docs, read-only. | `POST /jobs` |
 | `/jobs [status] [n]` | `/list`, `/queue` | List recent jobs. `n` defaults to 10, capped at 25. | `GET /jobs` |
 | `/status <id>` | `/job` | Everything about one job, including its open question. | `GET /jobs/{id}` |
 | `/log <id> [lines]` | `/logs` | Tail that job's worker log. `lines` defaults to 25, capped at 100. | `GET /jobs/{id}/log` |
@@ -119,7 +120,7 @@ also do with `curl` (see `docs/API.md`). Aliases are interchangeable.
 | `/whoami` | — | Your channel, user id, username, chat id and thread. Public. | — (local) |
 | `/help` | `/start` | The built-in help text. Public. | — (local) |
 
-That is 14 rows covering all 22 names in the `COMMANDS` dict in
+That is 15 rows covering all 26 names in the `COMMANDS` dict in
 `claudejobs/bots/common.py`.
 
 ### Options for `/run`

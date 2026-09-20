@@ -15,8 +15,9 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import models
+from .. import ask_sales_bot, models
 from ..client import AdminClient, ApiError
+from ..config import ConfigError, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -58,33 +59,55 @@ class ChatContext:
 
 HELP = """claudejobs — run Claude Code sessions from chat
 
-/run <prompt>           queue a job                      POST /jobs
-    options before the prompt:
-      dir:<path>        where to run       model:<name>  sonnet | opus | haiku
-      prio:<1-1000>     lower runs sooner  mode:<mode>   bypassPermissions | acceptEdits
-      timeout:<minutes> title:"short name"
-    example: /run dir:D:\\work\\api prio:10 fix the failing auth tests
+Tap a command or type it. <angle brackets> are yours to fill in.
 
-/jobs [status] [n]      list recent jobs                 GET  /jobs
-                        status: queued running waiting_input succeeded failed
-                                cancelled timed_out active
-/status <id>            everything about one job         GET  /jobs/{id}
-/log <id> [lines]       tail that job's worker log       GET  /jobs/{id}/log
-/messages <id>          questions, answers, notes        GET  /jobs/{id}/messages
-/events <id>            state changes                    GET  /jobs/{id}/events
+━ RUN WORK ━
 
-/reply <id> <answer>    answer a job that is waiting     POST /replies
-                        (or just reply to its message)
-/cancel <id> [reason]   stop a job (queued or running)   POST /jobs/{id}/cancel
-/retry <id>             requeue a finished job           POST /jobs/{id}/retry
-/edit <id> key=value    change a job that hasn't started PATCH /jobs/{id}
-                        keys: prompt directory title model mode priority
-                              timeout max_attempts
+/run <prompt>
+  Queue a job. Example:
+  /run fix the failing auth tests
+  Options go before the prompt:
+  dir:<path> — where to run (defaults to this chat's directory)
+  model:<sonnet|opus|haiku>
+  mode:<bypassPermissions|acceptEdits>
+  prio:<1-1000> — lower runs sooner
+  timeout:<minutes>
+  title:"short name"
+  Example: /run dir:D:\\work\\api prio:10 fix the auth tests
 
-/stats                  queue depth and workers          GET  /stats
-/health                 API and database check           GET  /health
-/whoami                 your ids, for the allowlist
-/help                   this message"""
+/ask_sales_bot <question>
+  Ask about the Sales Bot product. Reads the flexi-demo repo and the
+  Sales Bot docs, then answers here. Changes nothing. Example:
+  /ask_sales_bot how does a rep get scored on a call?
+
+━ SEE WHAT IS HAPPENING ━
+
+/jobs [status] [n] — recent jobs, newest first
+  status: queued, running, waiting_input, succeeded, failed,
+  cancelled, timed_out, or active for everything still going
+/status <id> — everything about one job
+/log <id> [lines] — tail that job's worker log
+/messages <id> — its questions, answers and notes
+/events <id> — its state changes
+
+━ STEER A JOB ━
+
+/reply <id> <answer> — answer a job that is waiting on you
+  (or just reply to the message it asked in)
+/cancel <id> [reason] — stop a job, queued or running
+/retry <id> — put a finished job back in the queue
+/edit <id> key=value — change a job that has not started
+  keys: prompt, directory, title, model, mode, priority,
+  timeout, max_attempts
+
+━ THIS MACHINE ━
+
+/stats — queue depth and busy workers
+/health — API, database and claude-on-PATH check
+/whoami — your ids, for the allowlist
+/help — this message
+
+Every command maps onto one HTTP route; see docs/API.md."""
 
 
 # --------------------------------------------------------------------------- #
@@ -176,6 +199,44 @@ def cmd_run(client: AdminClient, ctx: ChatContext, args: str) -> str:
     return (f"⏳ Job #{job['id']} queued\n"
             f"{job.get('title')}\n"
             f"in {job['directory']}\n\n"
+            f"Track it with /status {job['id']}")
+
+
+def cmd_ask_sales_bot(client: AdminClient, ctx: ChatContext, args: str) -> str:
+    """Queue a read-only question about the Sales Bot product.
+
+    Unlike /run this takes no options: the question is the whole argument, and
+    the two directories it reads are configuration rather than something a chat
+    message gets to choose.
+    """
+    question = args.strip()
+    if not question:
+        return ("Ask me something about Sales Bot.\n"
+                "Usage: /ask-sales-bot <question>\n"
+                "example: /ask-sales-bot how does a rep get scored on a call?")
+
+    settings = get_settings()
+    code_dir, docs_dir, directory = settings.require_sales_bot()
+    payload = ask_sales_bot.build_job(
+        question,
+        code_dir=code_dir, docs_dir=docs_dir, directory=directory,
+        asked_by=ctx.username,
+        timeout_minutes=settings.sales_bot_timeout_minutes,
+    )
+    payload.update({
+        "source": ctx.channel,
+        "source_user_id": ctx.user_id,
+        "source_username": ctx.username,
+        "source_chat_id": ctx.chat_id,
+        "source_thread_id": ctx.thread_id,
+        "source_message_id": ctx.message_id,
+        "created_by": ctx.username,
+    })
+
+    job = client.create_job(**payload)
+    return (f"🔎 Looking into that — job #{job['id']}.\n"
+            f"Reading {code_dir} and {docs_dir}; the answer comes back here when "
+            f"it's ready.\n\n"
             f"Track it with /status {job['id']}")
 
 
@@ -321,6 +382,11 @@ def cmd_health(client: AdminClient, ctx: ChatContext, args: str) -> str:
 COMMANDS: dict[str, Callable[[AdminClient, ChatContext, str], str]] = {
     "help": cmd_help, "start": cmd_help,
     "run": cmd_run, "new": cmd_run,
+    # Telegram's command entity stops at the first hyphen, so a typed
+    # "/ask-sales-bot ..." arrives as "/ask"; parse_message recovers the full
+    # name from the message text, and "ask" on its own is a usable shorthand.
+    "ask_sales_bot": cmd_ask_sales_bot, "sales_bot": cmd_ask_sales_bot,
+    "salesbot": cmd_ask_sales_bot, "ask": cmd_ask_sales_bot,
     "jobs": cmd_jobs, "list": cmd_jobs, "queue": cmd_jobs,
     "status": cmd_status, "job": cmd_status,
     "cancel": cmd_cancel, "stop": cmd_cancel,
@@ -344,7 +410,7 @@ def handle_command(command: str, args: str, ctx: ChatContext,
         return f"Unknown command /{command}. Try /help."
     try:
         return handler(client, ctx, args)
-    except ValueError as exc:
+    except (ValueError, ConfigError) as exc:
         return f"⚠️ {exc}"
     except ApiError as exc:
         return _friendly(exc)
@@ -372,8 +438,10 @@ def parse_message(text: str) -> tuple[str, str] | None:
     """Split an incoming chat message into (command, args).
 
     Accepts '/run ...' and plain 'run ...' so the same commands work in Slack,
-    where a leading slash belongs to Slack's own command system. Returns None
-    when the message isn't a command at all (it may be an answer to a question).
+    where a leading slash belongs to Slack's own command system, and reads a
+    hyphen as an underscore so '/ask-sales-bot ...' finds ask_sales_bot.
+    Returns None when the message isn't a command at all (it may be an answer to
+    a question).
     """
     stripped = text.strip()
     if not stripped:
@@ -382,6 +450,9 @@ def parse_message(text: str) -> tuple[str, str] | None:
     name = first.lstrip("/").lower()
     # Telegram sends "/run@botname" in groups.
     name = name.split("@", 1)[0]
+    # Commands are written with hyphens (/ask-sales-bot) but named with
+    # underscores, because that is all Telegram accepts in a command name.
+    name = name.replace("-", "_")
     if name in COMMANDS:
         return name, rest.strip()
     return None
