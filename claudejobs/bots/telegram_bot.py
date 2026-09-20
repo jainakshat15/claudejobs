@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from telegram import Update
@@ -30,6 +31,11 @@ from .common import COMMANDS, ChatContext, handle_command, parse_message
 log = logging.getLogger("claudejobs.telegram")
 
 MAX_MESSAGE_CHARS = 3800  # Telegram's limit is 4096; leave room for formatting
+#: Telegram only accepts these characters in a command name, so a hyphenated
+#: command (/ask-sales-bot) can only be registered under its underscore name.
+#: Telegram itself sends such a message as the "/ask" entity, which is why that
+#: alias exists; common.parse_message reads the real name off the message text.
+TELEGRAM_COMMAND_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 #: Commands anyone may use — they expose nothing but the caller's own ids.
 PUBLIC_COMMANDS = {"help", "start", "whoami"}
 
@@ -209,7 +215,8 @@ class TelegramBot:
                        .post_init(self._on_start)
                        .post_shutdown(self._on_stop)
                        .build())
-        application.add_handler(CommandHandler(sorted(COMMANDS), self.on_command))
+        commands = sorted(name for name in COMMANDS if TELEGRAM_COMMAND_RE.match(name))
+        application.add_handler(CommandHandler(commands, self.on_command))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_message))
         application.add_error_handler(self._on_error)
         return application

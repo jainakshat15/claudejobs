@@ -98,6 +98,7 @@ phone you can also do with curl or the CLI.
 | Chat | CLI | HTTP |
 | --- | --- | --- |
 | `/run <prompt>` | `claudejobs submit "<prompt>" --dir PATH` | `POST /jobs` |
+| `/ask-sales-bot <question>` | — | `POST /jobs` |
 | `/jobs [status]` | `claudejobs jobs --status active` | `GET /jobs` |
 | `/status <id>` | `claudejobs status <id>` | `GET /jobs/{id}` |
 | `/cancel <id>` | `claudejobs cancel <id>` | `POST /jobs/{id}/cancel` |

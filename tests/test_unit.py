@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import os
+import re
+from pathlib import Path
 
 import pytest
 
-from claudejobs import models, request_log
+from claudejobs import ask_sales_bot, config, models, request_log
 from claudejobs.bots.common import (
     ASSIGNMENT_RE,
+    COMMANDS,
     OPTION_RE,
     RUN_OPTIONS,
+    ChatContext,
     _pop_options,
+    cmd_ask_sales_bot,
     parse_message,
 )
 from claudejobs.prompt import build_job_instructions
@@ -26,6 +31,10 @@ from claudejobs.prompt import build_job_instructions
     ("/run@claudejobs_bot fix it", ("run", "fix it")),          # Telegram group
     ("/HELP", ("help", "")),
     ("/status 12", ("status", "12")),
+    # hyphens in a typed command, underscores in the name it resolves to
+    ("/ask-sales-bot how is a call scored?", ("ask_sales_bot", "how is a call scored?")),
+    ("ask-sales-bot what is a persona", ("ask_sales_bot", "what is a persona")),
+    ("/ask-sales-bot@claudejobs_bot hi", ("ask_sales_bot", "hi")),
     ("just a sentence", None),
     ("", None),
     ("yes please", None),                                       # an answer, not a command
@@ -61,6 +70,95 @@ def test_edit_assignments_parse():
                                      ASSIGNMENT_RE)
     assert options == {"priority": "5", "title": "nightly"}
     assert leftover == ""
+
+
+def test_every_command_name_is_one_telegram_will_register():
+    """A name Telegram refuses stops the whole bot from starting, so hyphenated
+    commands live in COMMANDS under their underscore spelling."""
+    from claudejobs.bots.telegram_bot import TELEGRAM_COMMAND_RE
+
+    assert all(TELEGRAM_COMMAND_RE.match(name) for name in COMMANDS)
+    assert all(re.fullmatch(r"[a-z0-9_]+", name) for name in COMMANDS)
+
+
+# --------------------------------------------------------------------------- #
+# /ask-sales-bot
+# --------------------------------------------------------------------------- #
+def _ctx(**overrides) -> ChatContext:
+    fields = {"channel": "telegram", "chat_id": "-100", "user_id": "7",
+              "username": "akshat", "message_id": "55"}
+    fields.update(overrides)
+    return ChatContext(**fields)
+
+
+def test_sales_bot_job_points_at_both_sources(tmp_path):
+    code, docs = tmp_path / "flexi-demo", tmp_path / "docs" / "Sales-Bot"
+    job = ask_sales_bot.build_job("how is a call scored?", code_dir=code, docs_dir=docs,
+                                  directory=str(tmp_path), asked_by="akshat",
+                                  timeout_minutes=20)
+
+    assert "how is a call scored?" in job["prompt"]
+    assert str(code) in job["prompt"] and str(docs) in job["prompt"]
+    assert "jobctl done" in job["prompt"]          # the answer goes back to the asker
+    assert str(ask_sales_bot.ANSWER_BUDGET) in job["prompt"]
+    assert job["title"] == "Sales Bot: how is a call scored?"
+    assert job["directory"] == str(tmp_path)
+    assert job["priority"] == ask_sales_bot.PRIORITY
+    assert job["timeout_minutes"] == 20
+    assert job["payload"] == {"kind": "ask-sales-bot", "question": "how is a call scored?"}
+    assert "read-only" in job["append_system_prompt"]
+
+
+def test_sales_bot_command_asks_for_a_question_when_given_none():
+    reply = cmd_ask_sales_bot(None, _ctx(), "   ")
+    assert "Usage: /ask-sales-bot" in reply
+
+
+def test_sales_bot_command_sends_the_chat_origin_with_the_job(monkeypatch, tmp_path):
+    code, docs = tmp_path / "flexi-demo", tmp_path / "docs" / "Sales-Bot"
+    code.mkdir()
+    docs.mkdir(parents=True)
+    monkeypatch.setenv("SALES_BOT_CODE_DIR", str(code))
+    monkeypatch.setenv("SALES_BOT_DOCS_DIR", str(docs))
+    config.get_settings.cache_clear()
+
+    sent = {}
+
+    class FakeClient:
+        def create_job(self, **payload):
+            sent.update(payload)
+            return {"id": 42, "title": payload["title"], "directory": payload["directory"]}
+
+    try:
+        reply = cmd_ask_sales_bot(FakeClient(), _ctx(), "how is a call scored?")
+    finally:
+        config.get_settings.cache_clear()
+
+    assert "#42" in reply
+    assert sent["source"] == "telegram"
+    assert sent["source_chat_id"] == "-100"      # the answer comes back here
+    assert sent["source_message_id"] == "55"
+    assert sent["created_by"] == "akshat"
+    assert Path(sent["directory"]) == tmp_path   # holds both sources
+
+
+def test_sales_bot_directories_default_to_siblings_of_the_checkout(monkeypatch):
+    for name in ("SALES_BOT_CODE_DIR", "SALES_BOT_DOCS_DIR", "SALES_BOT_DIRECTORY"):
+        monkeypatch.delenv(name, raising=False)
+    settings = config.load_settings()
+    parent = config.REPO_ROOT.parent
+
+    assert settings.sales_bot_code_dir == (parent / "flexi-demo").resolve()
+    assert settings.sales_bot_docs_dir == (parent / "docs" / "Sales-Bot").resolve()
+    # the job has to read both, so it runs where the two meet
+    assert Path(settings.sales_bot_directory) == parent.resolve()
+
+
+def test_missing_sales_bot_source_is_reported_by_name(monkeypatch, tmp_path):
+    monkeypatch.setenv("SALES_BOT_CODE_DIR", str(tmp_path / "not-here"))
+    settings = config.load_settings()
+    with pytest.raises(config.ConfigError, match="SALES_BOT_CODE_DIR"):
+        settings.require_sales_bot()
 
 
 # --------------------------------------------------------------------------- #

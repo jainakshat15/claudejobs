@@ -391,9 +391,9 @@ Now go to your chat app and send:
 /help
 ```
 
-You get the command list back: `/run`, `/jobs`, `/status`, `/log`, `/messages`,
-`/events`, `/reply`, `/cancel`, `/retry`, `/edit`, `/stats`, `/health`, `/whoami`,
-`/help`. Then queue a real job:
+You get the command list back: `/run`, `/ask-sales-bot`, `/jobs`, `/status`, `/log`,
+`/messages`, `/events`, `/reply`, `/cancel`, `/retry`, `/edit`, `/stats`, `/health`,
+`/whoami`, `/help`. Then queue a real job:
 
 ```
 /run list the files in this directory and tell me what this project is

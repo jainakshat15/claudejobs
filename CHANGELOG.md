@@ -6,6 +6,16 @@ Notable changes to this project. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`/ask-sales-bot <question>`** — a read-only question about the Sales Bot
+  product. It queues a job that reads the product's source (`SALES_BOT_CODE_DIR`,
+  the flexi-demo repository) and its user-facing documentation
+  (`SALES_BOT_DOCS_DIR`, `docs/Sales-Bot`), then reports the answer back to the
+  chat the question came from. Both paths default to siblings of this checkout;
+  the job runs in the nearest directory holding both, ahead of ordinary work
+  jobs, and is told to change nothing.
+
 ## [1.0.0] — 2026-09-20
 
 First release.
