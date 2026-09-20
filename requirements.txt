@@ -7,7 +7,7 @@
 
 fastapi==0.141.1
 starlette==1.6.0            # pinned explicitly: the request-log middleware depends on its streaming behaviour
-uvicorn==0.52.4
+uvicorn==0.53.0
 psycopg[binary,pool]==3.3.6
 psycopg-pool==3.3.2
 pydantic==2.13.5
