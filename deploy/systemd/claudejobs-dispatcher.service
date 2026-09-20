@@ -6,8 +6,8 @@ Wants=claudejobs-api.service
 
 [Service]
 Type=simple
-WorkingDirectory=%h/claude-server
-ExecStart=%h/claude-server/.venv/bin/python -m claudejobs dispatcher
+WorkingDirectory=%h/claudejobs
+ExecStart=%h/claudejobs/.venv/bin/python -m claudejobs dispatcher
 Restart=always
 RestartSec=5
 # Jobs open a terminal window per job, which needs a graphical session. On a

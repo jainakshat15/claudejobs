@@ -30,7 +30,7 @@ logs. You can switch at any time by editing `.env` and restarting the dispatcher
 ```bash
 mkdir -p ~/.config/systemd/user
 cp deploy/systemd/*.service ~/.config/systemd/user/
-# edit WorkingDirectory/ExecStart if the repo is not at ~/claude-server
+# edit WorkingDirectory/ExecStart if the repo is not at ~/claudejobs
 systemctl --user daemon-reload
 systemctl --user enable --now claudejobs-api claudejobs-dispatcher claudejobs-telegram
 
@@ -44,7 +44,7 @@ journalctl --user -u claudejobs-dispatcher -f
 ## Windows
 
 ```powershell
-cd D:\claude-server
+cd D:\claudejobs
 .\deploy\windows\Register-ClaudeJobsTasks.ps1
 
 Start-ScheduledTask -TaskName claudejobs-api

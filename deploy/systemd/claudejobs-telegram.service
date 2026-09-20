@@ -5,8 +5,8 @@ Wants=claudejobs-api.service
 
 [Service]
 Type=simple
-WorkingDirectory=%h/claude-server
-ExecStart=%h/claude-server/.venv/bin/python -m claudejobs telegram
+WorkingDirectory=%h/claudejobs
+ExecStart=%h/claudejobs/.venv/bin/python -m claudejobs telegram
 Restart=always
 RestartSec=10
 

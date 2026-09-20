@@ -6,7 +6,7 @@ welcome.
 ## Getting set up
 
 ```bash
-git clone <your-fork> claude-server && cd claude-server
+git clone https://github.com/YOUR-USERNAME/claudejobs.git && cd claudejobs
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt

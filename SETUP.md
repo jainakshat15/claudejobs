@@ -108,8 +108,8 @@ On a headless server you will set `TERMINAL_MODE=headless` instead (see section 
 ## 4. Get the code and create a virtualenv
 
 ```bash
-git clone <your-repo-url> claude-server
-cd claude-server
+git clone https://github.com/jainakshat15/claudejobs.git
+cd claudejobs
 ```
 
 Create the virtualenv:
@@ -295,14 +295,14 @@ python -m claudejobs selfcheck
 A healthy run, with Telegram configured and Slack not, looks like this:
 
 ```
-[PASS] .env present — D:\claude-server\.env
+[PASS] .env present — D:\claudejobs\.env
 [PASS] settings load — worker my-laptop, 2 slot(s)
 [PASS] API_TOKEN set
 [PASS] database reachable — PostgreSQL 16.4
 [PASS] schema up to date — all migrations applied
 [PASS] claude CLI found — C:\Users\you\.local\bin\claude.exe
 [PASS] terminal available — C:\Windows\System32\wt.exe
-[PASS] log directory writable — D:\claude-server\logs\jobs
+[PASS] log directory writable — D:\claudejobs\logs\jobs
 [WARN] API responding — start it with: claudejobs api
 [PASS] telegram configured — 1 allowed user(s)
 [WARN] slack configured — SLACK_BOT_TOKEN empty (bot disabled)
@@ -475,9 +475,9 @@ launch a terminal or open windows onto a desktop nobody is looking at.
 3. **Triggers** tab: New → Begin the task **At log on**, for your user. (Use "At
    startup" only in the headless setup described below.)
 4. **Actions** tab: New → Start a program.
-   - Program/script: `D:\claude-server\.venv\Scripts\python.exe`
+   - Program/script: `D:\claudejobs\.venv\Scripts\python.exe`
    - Add arguments: `-m claudejobs all`
-   - Start in: `D:\claude-server`
+   - Start in: `D:\claudejobs`
 5. **Conditions** tab: untick "Start the task only if the computer is on AC power" for a
    laptop that runs on battery.
 6. **Settings** tab: tick "If the task fails, restart every 1 minute", and untick "Stop
@@ -516,8 +516,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/you/claude-server
-ExecStart=/home/you/claude-server/.venv/bin/python -m claudejobs all
+WorkingDirectory=/home/you/claudejobs
+ExecStart=/home/you/claudejobs/.venv/bin/python -m claudejobs all
 Restart=always
 RestartSec=5
 

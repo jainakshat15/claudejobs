@@ -7,8 +7,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 # Adjust to where you cloned the repo.
-WorkingDirectory=%h/claude-server
-ExecStart=%h/claude-server/.venv/bin/python -m claudejobs api
+WorkingDirectory=%h/claudejobs
+ExecStart=%h/claudejobs/.venv/bin/python -m claudejobs api
 Restart=always
 RestartSec=5
 # Settings come from .env in WorkingDirectory; anything set here overrides it.

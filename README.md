@@ -1,11 +1,16 @@
 # claudejobs
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/jainakshat15/claudejobs/actions/workflows/ci.yml/badge.svg)](https://github.com/jainakshat15/claudejobs/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-Queue Claude Code sessions in Postgres and run them on one always-on machine,
-driven from Telegram or Slack.
+Run Claude Code sessions as queued jobs on one always-on machine, driven from
+Telegram or Slack. Postgres-backed queue with leases, retries and per-job
+terminals — and when Claude needs a decision, it asks you in chat and waits for
+your answer.
+
+*An independent project. Not affiliated with or endorsed by Anthropic; "Claude"
+is their trademark.*
 
 > **This runs code on your machine from a chat message.** Jobs start with
 > `bypassPermissions` by default, which means Claude executes commands without
@@ -63,7 +68,7 @@ Full instructions, including installing Python and creating the database, are in
 **[SETUP.md](SETUP.md)**. The short version:
 
 ```bash
-git clone <your-repo-url> claude-server && cd claude-server
+git clone https://github.com/jainakshat15/claudejobs.git && cd claudejobs
 python -m venv .venv && .venv/Scripts/activate      # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 

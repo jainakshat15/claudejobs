@@ -189,7 +189,7 @@ curl -s http://127.0.0.1:8000/jobs/42 -H "X-Auth-Token: $API_TOKEN"
   "title": "payments retry",
   "directory": "D:\\work\\web",
   "worker_id": "studio-laptop",
-  "log_path": "D:\\claude-server\\logs\\jobs\\job-42.log",
+  "log_path": "D:\\claudejobs\\logs\\jobs\\job-42.log",
   "last_heartbeat_at": "2026-09-20T10:31:04.112Z",
   "lease_expires_at": "2026-09-20T10:34:04.112Z",
   "open_question": {
@@ -346,7 +346,7 @@ curl -s "http://127.0.0.1:8000/jobs/42/log?tail=5" -H "X-Auth-Token: $API_TOKEN"
 ```json
 {
   "job_id": 42,
-  "path": "D:\\claude-server\\logs\\jobs\\job-42.log",
+  "path": "D:\\claudejobs\\logs\\jobs\\job-42.log",
   "lines": [
     "2026-09-20 10:20:33 INFO    job #42 starting in D:\\work\\web",
     "2026-09-20 10:20:33 INFO    claude pid 24512",

@@ -37,5 +37,5 @@ First release.
 - **Documentation** — setup, architecture, API reference, operations runbook,
   and per-platform bot guides.
 
-[Unreleased]: https://github.com/OWNER/REPO/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/OWNER/REPO/releases/tag/v1.0.0
+[Unreleased]: https://github.com/jainakshat15/claudejobs/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/jainakshat15/claudejobs/releases/tag/v1.0.0
