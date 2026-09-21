@@ -1,0 +1,109 @@
+# Slack app manifest for claudejobs — generated, do not edit by hand.
+#
+#   python -m claudejobs slack-manifest
+#
+# Paste into https://api.slack.com/apps → your app → App Manifest (YAML),
+# then reinstall the app when Slack asks: the scopes change.
+display_information:
+  name: "claudejobs"
+  description: "Queue Claude Code jobs from Slack, and answer the questions they ask you back."
+features:
+  bot_user:
+    display_name: "claudejobs"
+    always_online: true
+  slash_commands:
+    - command: "/claudejobs"
+      description: "Run any claudejobs command"
+      usage_hint: "<command> [arguments] — e.g. run fix the failing tests"
+      should_escape: false
+    - command: "/run"
+      description: "Queue a Claude Code job on the worker machine"
+      usage_hint: "[dir:<path>] [model:<name>] [prio:<1-1000>] <what to do>"
+      should_escape: false
+    - command: "/ask"
+      description: "Ask about a product (lists which ones are available)"
+      usage_hint: "<question>"
+      should_escape: false
+    - command: "/jobs"
+      description: "Recent jobs, newest first"
+      usage_hint: "[queued|running|waiting_input|active] [count]"
+      should_escape: false
+    - command: "/job"
+      description: "Everything about one job"
+      usage_hint: "<job id>"
+      should_escape: false
+    - command: "/log"
+      description: "Tail a job's worker log"
+      usage_hint: "<job id> [lines]"
+      should_escape: false
+    - command: "/messages"
+      description: "A job's questions, answers and notes"
+      usage_hint: "<job id>"
+      should_escape: false
+    - command: "/events"
+      description: "A job's state changes"
+      usage_hint: "<job id>"
+      should_escape: false
+    - command: "/reply"
+      description: "Answer a job that is waiting on you"
+      usage_hint: "<job id> <your answer>"
+      should_escape: false
+    - command: "/cancel"
+      description: "Stop a job, queued or running"
+      usage_hint: "<job id> [reason]"
+      should_escape: false
+    - command: "/retry"
+      description: "Put a finished job back in the queue"
+      usage_hint: "<job id>"
+      should_escape: false
+    - command: "/edit"
+      description: "Change a job that has not started yet"
+      usage_hint: "<job id> key=value ..."
+      should_escape: false
+    - command: "/stats"
+      description: "Queue depth and busy workers"
+      usage_hint: ""
+      should_escape: false
+    - command: "/health"
+      description: "API, database and claude-on-PATH check"
+      usage_hint: ""
+      should_escape: false
+    - command: "/whoami"
+      description: "Your ids, for the allowlist"
+      usage_hint: ""
+      should_escape: false
+    - command: "/help"
+      description: "Every command and how to use it"
+      usage_hint: ""
+      should_escape: false
+    - command: "/ask-sales-bot"
+      description: "Ask a question about Sales Bot"
+      usage_hint: "how does a rep get scored on a call?"
+      should_escape: false
+    - command: "/ask-od"
+      description: "Ask a question about Organizational Development"
+      usage_hint: "how does a journey cycle unlock its modules?"
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - "app_mentions:read"
+      - "channels:history"
+      - "chat:write"
+      - "commands"
+      - "groups:history"
+      - "im:history"
+      - "mpim:history"
+settings:
+  event_subscriptions:
+    bot_events:
+      - "app_mention"
+      - "message.channels"
+      - "message.groups"
+      - "message.im"
+      - "message.mpim"
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

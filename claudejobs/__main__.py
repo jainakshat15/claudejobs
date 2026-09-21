@@ -13,6 +13,7 @@
     claudejobs status <id> | cancel <id> | retry <id> | answer <id> "text"
     claudejobs stats
     claudejobs secret           print a fresh random token for .env
+    claudejobs slack-manifest   print the Slack app manifest (every command)
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from . import models
 from .config import REPO_ROOT, ConfigError, get_settings, setup_logging
@@ -237,6 +239,21 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_slack_manifest(args) -> int:
+    """Print (or write) the Slack app manifest declaring every command."""
+    from .slack_manifest import render
+
+    text = render(app_name=args.app_name, prefix=args.prefix)
+    if args.out:
+        path = Path(args.out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"wrote {path}")
+    else:
+        print(text)
+    return 0
+
+
 def cmd_secret(args) -> int:
     print(secrets.token_urlsafe(32))
     return 0
@@ -376,6 +393,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("all", help="run every configured service").set_defaults(func=cmd_all)
     sub.add_parser("selfcheck", help="check configuration and connectivity").set_defaults(func=cmd_selfcheck)
     sub.add_parser("secret", help="print a random token for .env").set_defaults(func=cmd_secret)
+
+    manifest = sub.add_parser("slack-manifest",
+                              help="print the Slack app manifest declaring every command")
+    manifest.add_argument("--prefix", default="",
+                          help="register commands under a prefix, e.g. cj- for /cj-run "
+                               "(set SLACK_COMMAND_PREFIX to match)")
+    manifest.add_argument("--app-name", default="claudejobs", help="the Slack app's display name")
+    manifest.add_argument("--out", help="write to this file instead of printing")
+    manifest.set_defaults(func=cmd_slack_manifest)
 
     migrate = sub.add_parser("migrate", help="create or update the database schema")
     migrate.add_argument("action", choices=["up", "status"], nargs="?", default="up")

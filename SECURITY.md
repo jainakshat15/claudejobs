@@ -22,7 +22,7 @@ that executes untrusted-ish input, and configure the controls below.
 | --- | --- | --- |
 | Keep the API private | `API_HOST=127.0.0.1` (default) | Every route but `/health` requires `API_TOKEN`, but the API starts processes — don't put it on a network |
 | Fence the filesystem | `ALLOWED_ROOTS=/path/one:/path/two` | Jobs are refused outside these directories |
-| Short allowlists | `TELEGRAM_ALLOWED_USERS`, `SLACK_ALLOWED_USERS` | Both bots refuse to start empty; only listed ids may run jobs |
+| Short allowlists | `TELEGRAM_ALLOWED_USERS`, `SLACK_ALLOWED_USERS` | Both bots refuse to start empty; only listed ids may run jobs. `SLACK_ALLOWED_USERS=*` deliberately opens the bot to the whole workspace — see below |
 | A real token | `API_TOKEN` from `claudejobs secret` | Fails closed: an unset token makes every route return 503 |
 | Consider a tamer mode | `DEFAULT_PERMISSION_MODE=acceptEdits` | Claude edits files freely but stops before risky shell commands. Unattended, a stopped job stalls until its question timeout — safer, less autonomous |
 | Isolate the host | — | A dedicated machine or VM, with credentials scoped to what the jobs genuinely need |
@@ -37,7 +37,10 @@ Stated plainly so you can judge the risk:
 
 - **An allowlisted user is fully trusted.** There are no per-user permissions,
   no approval step, and no audit of who may touch which directory beyond
-  `ALLOWED_ROOTS`.
+  `ALLOWED_ROOTS`. With `SLACK_ALLOWED_USERS=*` that trust extends to everyone
+  in the Slack workspace, including anyone later invited to it — treat it as
+  giving the workspace a shell on that machine, and only use it where the team
+  is small and the machine holds nothing you would not share.
 - **One shared admin token.** Anyone holding `API_TOKEN` can see and control
   every job.
 - **Prompt injection reaches a shell.** A job that reads a hostile repository,

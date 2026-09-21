@@ -157,7 +157,8 @@ This service starts processes on the machine it runs on. Treat it accordingly:
 
 - The API binds `127.0.0.1` by default and every route but `/health` needs
   `API_TOKEN`. Don't expose it without a firewall or VPN in front.
-- Both bots refuse to start without an allowlist of user ids.
+- Both bots refuse to start without an allowlist of user ids. `SLACK_ALLOWED_USERS=*`
+  opens the Slack bot to the whole workspace, which is a deliberate choice, not a default.
 - `ALLOWED_ROOTS` limits which directories jobs may run in.
 - Each running job gets its own token, stored hashed, that unlocks only that job.
 - `DEFAULT_PERMISSION_MODE=bypassPermissions` means Claude never stops to ask

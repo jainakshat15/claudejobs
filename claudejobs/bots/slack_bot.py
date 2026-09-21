@@ -27,11 +27,21 @@ from slack_sdk.errors import SlackApiError
 
 from ..client import AdminClient, ApiError
 from ..config import get_settings, setup_logging
-from .common import ChatContext, _friendly, handle_command, parse_message
+from .common import (
+    UMBRELLA_COMMAND,
+    ChatContext,
+    _friendly,
+    handle_command,
+    parse_message,
+    strip_command_prefix,
+)
 
 log = logging.getLogger("claudejobs.slack")
 
 MENTION_RE = re.compile(r"<@[UW][A-Z0-9]+>")
+#: Slack routes only this app's own commands to us, so matching them all is
+#: safe — and means the manifest decides which exist, not this file.
+ANY_SLASH_COMMAND = re.compile(r"^/[A-Za-z0-9_-]+$")
 PUBLIC_COMMANDS = {"help", "start", "whoami"}
 
 
@@ -59,29 +69,52 @@ class SlackBot:
                 return
             self.on_text(event, say)
 
-        @self.app.command("/claudejobs")
+        # Slack only delivers commands that are registered to this app, so one
+        # catch-all matcher covers whichever ones you declared in the manifest:
+        # adding a command there needs no change here.
+        @self.app.command(ANY_SLASH_COMMAND)
         def _slash(ack, command: dict, respond) -> None:
             ack()
-            ctx = ChatContext(
-                channel="slack",
-                chat_id=str(command.get("channel_id")),
-                user_id=str(command.get("user_id")),
-                username=command.get("user_name") or str(command.get("user_id")),
-                default_directory=self._default_dir(str(command.get("channel_id"))),
-            )
-            text = (command.get("text") or "help").strip()
+            self.on_slash(command, respond)
+
+    def on_slash(self, command: dict, respond) -> None:
+        """Handle one slash command, whatever name it was registered under.
+
+        Both spellings work: `/claudejobs run fix the tests` puts the command in
+        the text, while `/run fix the tests` puts it in the command name.
+        """
+        ctx = ChatContext(
+            channel="slack",
+            chat_id=str(command.get("channel_id")),
+            user_id=str(command.get("user_id")),
+            username=command.get("user_name") or str(command.get("user_id")),
+            default_directory=self._default_dir(str(command.get("channel_id"))),
+        )
+        raw = str(command.get("command") or "")
+        text = (command.get("text") or "").strip()
+        name = strip_command_prefix(raw, self.settings.slack_command_prefix)
+
+        if name in {UMBRELLA_COMMAND, "cj", ""}:
             parsed = parse_message(text) or ("help", "")
-            if parsed[0] not in PUBLIC_COMMANDS and not self._is_allowed(ctx.user_id):
-                respond(self._refusal())
+        else:
+            parsed = parse_message(f"/{name} {text}".strip())
+            if parsed is None:
+                respond(f"`{raw}` is registered in Slack but is not a claudejobs "
+                        f"command. Type `/{UMBRELLA_COMMAND} help` to see them all.")
                 return
-            respond(handle_command(parsed[0], parsed[1], ctx, self.client))
+
+        if parsed[0] not in PUBLIC_COMMANDS and not self._is_allowed(ctx.user_id):
+            respond(self._refusal())
+            return
+        respond(handle_command(parsed[0], parsed[1], ctx, self.client))
 
     # ------------------------------------------------------------------ #
     def _default_dir(self, channel_id: str) -> str | None:
         return self.settings.slack_channel_dirs.get(channel_id) or self.settings.default_directory or None
 
     def _is_allowed(self, user_id: str) -> bool:
-        return user_id in self.allowed_users
+        # SLACK_ALLOWED_USERS=* opens the bot to the whole workspace.
+        return self.settings.slack_open_to_everyone or user_id in self.allowed_users
 
     def _refusal(self) -> str:
         return ("Not authorised. Type `whoami` and ask the owner of this machine to add "
@@ -193,7 +226,13 @@ class SlackBot:
                                     daemon=True)
         delivery.start()
         handler = SocketModeHandler(self.app, self.app_token)
-        log.info("slack bot connecting; %s user(s) allowed", len(self.allowed_users))
+        if self.settings.slack_open_to_everyone:
+            log.warning(
+                "slack bot connecting OPEN TO THE WHOLE WORKSPACE (SLACK_ALLOWED_USERS=*): "
+                "anyone who can message this app can run jobs on %s",
+                self.settings.worker_id)
+        else:
+            log.info("slack bot connecting; %s user(s) allowed", len(self.allowed_users))
         try:
             handler.start()  # blocks until interrupted
         except KeyboardInterrupt:

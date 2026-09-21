@@ -161,6 +161,8 @@ class Settings:
     slack_app_token: str
     slack_allowed_users: set[str]
     slack_channel_dirs: dict[str, str]
+    #: Prefix the Slack slash commands were registered with, e.g. "cj-".
+    slack_command_prefix: str
     outbound_poll_seconds: int
 
     # ----------------------------------------------------------------- #
@@ -195,6 +197,11 @@ class Settings:
             )
         return self.telegram_bot_token, self.telegram_allowed_users
 
+    @property
+    def slack_open_to_everyone(self) -> bool:
+        """SLACK_ALLOWED_USERS=* — anyone in the workspace may run jobs."""
+        return "*" in self.slack_allowed_users
+
     def require_slack(self) -> tuple[str, str, set[str]]:
         if not self.slack_bot_token or not self.slack_app_token:
             raise ConfigError(
@@ -204,7 +211,9 @@ class Settings:
         if not self.slack_allowed_users:
             raise ConfigError(
                 "SLACK_ALLOWED_USERS is empty. Refusing to start a bot that anyone "
-                "in the workspace could use to run commands on this machine."
+                "in the workspace could use to run commands on this machine.\n"
+                "List the member ids that may use it, or set SLACK_ALLOWED_USERS=* "
+                "to deliberately open it to the whole workspace."
             )
         return self.slack_bot_token, self.slack_app_token, self.slack_allowed_users
 
@@ -305,6 +314,7 @@ def load_settings() -> Settings:
         slack_app_token=_str("SLACK_APP_TOKEN"),
         slack_allowed_users=set(_csv("SLACK_ALLOWED_USERS")),
         slack_channel_dirs=_json_dict("SLACK_CHANNEL_DIRS"),
+        slack_command_prefix=_str("SLACK_COMMAND_PREFIX"),
         outbound_poll_seconds=max(1, _int("OUTBOUND_POLL_SECONDS", 3)),
     )
 

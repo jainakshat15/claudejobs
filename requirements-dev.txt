@@ -2,3 +2,6 @@
 
 pytest==9.1.1
 ruff==0.16.8
+# Only used by the tests, to check the generated Slack manifest is valid YAML.
+PyYAML==6.0.3
+

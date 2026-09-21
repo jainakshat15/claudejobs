@@ -336,6 +336,51 @@ def test_placeholder_api_token_is_refused(monkeypatch):
         settings.require_api_token()
 
 
+def _slack_settings(monkeypatch, allowed: str):
+    from claudejobs import config
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+    monkeypatch.setenv("SLACK_ALLOWED_USERS", allowed)
+    return config.load_settings()
+
+
+def test_slack_refuses_an_empty_allowlist(monkeypatch):
+    from claudejobs import config
+
+    settings = _slack_settings(monkeypatch, "")
+    with pytest.raises(config.ConfigError, match="ALLOWED_USERS is empty"):
+        settings.require_slack()
+
+
+def test_slack_wildcard_opens_the_bot_to_the_whole_workspace(monkeypatch):
+    settings = _slack_settings(monkeypatch, "*")
+    assert settings.slack_open_to_everyone is True
+    settings.require_slack()            # must not raise
+
+
+def test_a_named_allowlist_is_not_open_to_everyone(monkeypatch):
+    settings = _slack_settings(monkeypatch, "U123,U456")
+    assert settings.slack_open_to_everyone is False
+    assert settings.slack_allowed_users == {"U123", "U456"}
+
+
+def test_slack_permission_check_honours_the_wildcard(monkeypatch):
+    """The bot's own check, without needing a Slack connection."""
+    from types import SimpleNamespace
+
+    from claudejobs.bots.slack_bot import SlackBot
+
+    open_bot = SimpleNamespace(settings=_slack_settings(monkeypatch, "*"),
+                               allowed_users={"*"})
+    assert SlackBot._is_allowed(open_bot, "U-never-seen-before") is True
+
+    closed_bot = SimpleNamespace(settings=_slack_settings(monkeypatch, "U123"),
+                                 allowed_users={"U123"})
+    assert SlackBot._is_allowed(closed_bot, "U123") is True
+    assert SlackBot._is_allowed(closed_bot, "U999") is False
+
+
 def test_telegram_requires_an_allowlist(monkeypatch):
     from claudejobs import config
 

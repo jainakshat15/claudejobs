@@ -427,6 +427,103 @@ for _product in products.CATALOGUE:
         COMMANDS[_name] = partial(cmd_ask_product, key=_product.key)
 
 
+# --------------------------------------------------------------------------- #
+# command catalogue — used to declare the commands to Slack
+# --------------------------------------------------------------------------- #
+#: The commands worth putting in a chat client's autocomplete, in the order they
+#: should appear, with a one-line description and a hint at the arguments.
+#: Aliases are deliberately left out; product commands are generated below.
+COMMAND_META: dict[str, tuple[str, str]] = {
+    "run": ("Queue a Claude Code job on the worker machine",
+            "[dir:<path>] [model:<name>] [prio:<1-1000>] <what to do>"),
+    "ask": ("Ask about a product (lists which ones are available)", "<question>"),
+    "jobs": ("Recent jobs, newest first", "[queued|running|waiting_input|active] [count]"),
+    "status": ("Everything about one job", "<job id>"),
+    "log": ("Tail a job's worker log", "<job id> [lines]"),
+    "messages": ("A job's questions, answers and notes", "<job id>"),
+    "events": ("A job's state changes", "<job id>"),
+    "reply": ("Answer a job that is waiting on you", "<job id> <your answer>"),
+    "cancel": ("Stop a job, queued or running", "<job id> [reason]"),
+    "retry": ("Put a finished job back in the queue", "<job id>"),
+    "edit": ("Change a job that has not started yet", "<job id> key=value ..."),
+    "stats": ("Queue depth and busy workers", ""),
+    "health": ("API, database and claude-on-PATH check", ""),
+    "whoami": ("Your ids, for the allowlist", ""),
+    "help": ("Every command and how to use it", ""),
+}
+
+#: Slack ships these as built-in shortcuts; an app cannot take the name.
+#: Checked against Slack's "Built-in shortcuts" help article.
+SLACK_RESERVED = frozenset({
+    "archive", "browse", "collapse", "create", "darkmode", "description", "dm",
+    "dnd", "downloads", "drafts", "expand", "feedback", "gif", "huddle", "invite",
+    "kick", "leave", "mentions", "msg", "mute", "notifications", "people",
+    "remind", "remove", "rename", "saved", "search", "send", "shortcuts", "shrug",
+    "snippet", "status", "topic", "workflow",
+})
+
+#: What to register instead when Slack owns the obvious name. /status is Slack's
+#: own "set my status", so the job view goes in as its existing alias /job.
+SLACK_SUBSTITUTES = {"status": "job"}
+
+#: The umbrella command: every other command is also reachable through it.
+UMBRELLA_COMMAND = "claudejobs"
+
+
+def slack_commands(prefix: str = "") -> list[dict[str, str]]:
+    """Every command to declare to Slack, as app-manifest entries.
+
+    ``prefix`` (e.g. "cj-") sidesteps both Slack's reserved names and any
+    command another installed app already owns. Without one, a name Slack
+    reserves is registered under its alias instead.
+    """
+    prefix = prefix.strip().lstrip("/")
+    entries: list[dict[str, str]] = [{
+        "command": f"/{prefix}{UMBRELLA_COMMAND}",
+        "description": "Run any claudejobs command",
+        "usage_hint": "<command> [arguments] — e.g. run fix the failing tests",
+        "should_escape": False,
+    }]
+
+    for name, (description, hint) in COMMAND_META.items():
+        slack_name = name
+        if not prefix and name in SLACK_RESERVED:
+            substitute = SLACK_SUBSTITUTES.get(name)
+            if substitute is None or substitute not in COMMANDS:
+                continue        # Slack owns the name and we have no alias
+            slack_name = substitute
+        entries.append({
+            "command": f"/{prefix}{slack_name.replace('_', '-')}",
+            "description": description,
+            "usage_hint": hint,
+            "should_escape": False,
+        })
+
+    for product in products.CATALOGUE:
+        entries.append({
+            "command": f"/{prefix}{product.command.replace('_', '-')}",
+            "description": f"Ask a question about {product.name}",
+            "usage_hint": product.example,
+            "should_escape": False,
+        })
+
+    return entries
+
+
+def strip_command_prefix(name: str, prefix: str = "") -> str:
+    """Turn a Slack command name back into one of ours.
+
+    Undoes both the configured prefix and the substitution above, so whichever
+    spelling is registered in Slack reaches the same handler.
+    """
+    name = name.strip().lstrip("/").lower()
+    for candidate in (prefix.strip().lstrip("/"), "cj-", f"{UMBRELLA_COMMAND}-"):
+        if candidate and name.startswith(candidate):
+            name = name[len(candidate):]
+            break
+    return name.replace("-", "_")
+
+
 def handle_command(command: str, args: str, ctx: ChatContext,
                    client: AdminClient) -> str:
     """Run one command and return the reply text. Never raises."""

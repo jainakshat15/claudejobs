@@ -46,7 +46,7 @@ Open **Features -> OAuth & Permissions -> Scopes -> Bot Token Scopes** and add:
 | `im:history` | Read direct messages sent to the bot. |
 | `mpim:history` | Read group direct messages the bot is in. |
 | `chat:write` | Post replies, questions and notices (`chat.postMessage`). |
-| `commands` | Only if you add the optional `/claudejobs` slash command (step 5). |
+| `commands` | Only if you register slash commands (step 5). The generated manifest includes this scope. |
 
 Then:
 
@@ -81,20 +81,83 @@ Save changes, and reinstall the app if Slack asks you to.
 The bot ignores messages that carry a `bot_id` or a `subtype`, so its own posts,
 edits and join notices never loop back into it.
 
-## 5. Optional: the `/claudejobs` slash command
+## 5. Slash commands
 
-The app registers a handler for a slash command named `/claudejobs`, but it is
-**entirely optional** — plain messages work the same way (see step 7). Add it
-only if you like typing Slack-native commands.
+Slash commands are **optional** — plain messages work the same way (step 7) —
+but they give you Slack's autocomplete, which is the easiest way to discover
+what the bot can do.
 
-1. Open **Features -> Slash Commands -> Create New Command**.
-2. Command: `/claudejobs`. Request URL is not used in Socket Mode; short
-   description and usage hint are free text.
-3. Save, add the `commands` scope (step 3) and reinstall the app.
+The bot handles whatever commands you register: it matches every slash command
+Slack routes to this app and reads the command name itself. So the list below is
+decided by your Slack app configuration, not by the code.
 
-Usage puts the claudejobs command inside it, e.g. `/claudejobs jobs active` or
-`/claudejobs run dir:D:\work\api fix the failing tests`. With no text it shows
-the help. Its answers are ephemeral (visible only to you).
+### Register them all at once, with a manifest
+
+Filling in **Create New Command** once per command is slow and easy to get
+wrong. Generate the manifest instead — it declares every command, along with the
+scopes, events and Socket Mode settings from the previous steps:
+
+```bash
+python -m claudejobs slack-manifest
+```
+
+A copy is committed at [`../deploy/slack-app-manifest.yml`](../deploy/slack-app-manifest.yml).
+Regenerate it after adding a product, because each product gets its own command:
+
+```bash
+python -m claudejobs slack-manifest --out deploy/slack-app-manifest.yml
+```
+
+To apply it: **api.slack.com/apps -> your app -> App Manifest**, switch to the
+YAML tab, paste, save, then reinstall the app when Slack asks (the scopes
+change). Editing the manifest is the same as editing every settings page at
+once, so check the diff Slack shows you before confirming.
+
+### What gets registered
+
+| Command | Does |
+| --- | --- |
+| `/claudejobs <command> ...` | Anything — the umbrella form |
+| `/run`, `/ask`, `/ask-sales-bot`, `/ask-od` | Start work or ask a question |
+| `/jobs`, `/job`, `/log`, `/messages`, `/events` | See what is happening |
+| `/reply`, `/cancel`, `/retry`, `/edit` | Steer a job |
+| `/stats`, `/health`, `/whoami`, `/help` | This machine, and help |
+
+Both spellings reach the same handler: `/run fix the tests` and
+`/claudejobs run fix the tests` do the same thing. Answers are ephemeral —
+visible only to you — while a job's own messages are posted to the channel.
+
+### Two Slack rules worth knowing
+
+**`/status` is Slack's own command** (it sets your Slack status), and an app
+cannot take it. The manifest registers **`/job <id>`** instead, which is an
+existing alias for the same thing. Slack owns roughly thirty such names —
+`/remind`, `/topic`, `/invite`, `/search`, `/mute` and so on.
+
+**Slash commands do not work inside message threads.** Slack only allows its own
+built-ins there. This matters when a job asks you something, because that
+conversation happens in a thread: answer it by **typing a plain reply in the
+thread** (no slash), which the bot routes to the right job. `/reply <id> <answer>`
+works fine from the main channel view.
+
+### If a name is already taken
+
+Another installed app may already own `/run` or `/jobs`; Slack will refuse those
+entries. Register everything under a prefix instead:
+
+```bash
+python -m claudejobs slack-manifest --prefix cj-
+```
+
+That produces `/cj-run`, `/cj-jobs`, `/cj-status` and so on — no collisions, and
+typing `/cj` lists them together. Then tell the bot to expect it, in `.env`:
+
+```
+SLACK_COMMAND_PREFIX=cj-
+```
+
+The bot strips the prefix before dispatching, so everything else behaves the
+same. Note that `/help` output still shows the unprefixed names.
 
 ## 6. Find your member id and fill the allowlist
 
@@ -107,7 +170,8 @@ reason the bot **refuses to start with an empty allowlist** — see
 
 Only `help`, `start` and `whoami` work for anyone. **Every other command
 requires the allowlist**, and plain messages from people who are not on it are
-ignored entirely.
+ignored entirely. To skip the list and let the whole workspace in, see
+[Opening it to the whole workspace](#opening-it-to-the-whole-workspace) below.
 
 Two ways to get your member id:
 
@@ -127,6 +191,28 @@ SLACK_ALLOWED_USERS=U01ABC2DEF,U09XYZ8GHI
 > replace it with the real ids. `whoami` answers even when you are not on the
 > list.
 
+### Opening it to the whole workspace
+
+To let everyone in the workspace use the bot, set the wildcard:
+
+```dotenv
+SLACK_ALLOWED_USERS=*
+```
+
+Then any member who can message the app can queue jobs, cancel other people's
+jobs and read their logs. The bot logs a warning at startup saying so, because
+this is the one setting that decides who can run commands on the machine.
+
+Be deliberate about it. It is reasonable inside a small, trusted team where the
+worker machine holds nothing sensitive; it is a bad idea in a workspace with
+guests, external partners, or anyone whose account you would not hand a terminal
+to. The other rails still apply — `ALLOWED_ROOTS` limits which directories jobs
+may touch, and everything is recorded in `job_events` — but they limit *where*
+work happens, not *who* asks for it.
+
+An empty value is still refused: that way an unconfigured install fails closed
+rather than silently accepting the whole workspace.
+
 Start the bot on the 24/7 machine with:
 
 ```console
@@ -137,9 +223,12 @@ Every change to `.env` needs a bot restart — settings are read once at startup
 
 ## 7. How commands are typed in Slack
 
-- **A leading slash is optional.** Slack reserves real slash commands, so the
-  bot accepts both forms: `run fix the tests` and, if you added the slash
-  command, `/claudejobs run fix the tests`.
+- **A leading slash is optional.** All three forms do the same thing:
+  `run fix the tests` as a plain message, `/run fix the tests` if you registered
+  the slash commands (step 5), and `/claudejobs run fix the tests` through the
+  umbrella command.
+- **In a thread, use plain text.** Slack does not deliver app slash commands
+  typed inside a thread, so answer a job's question by replying normally.
 - **In a direct message**, type the command on its own: `jobs active`.
 - **In a channel**, mention the bot: `@claudejobs status 42`. The mention is
   stripped before the command is parsed. The bot must be invited to the channel
@@ -288,7 +377,7 @@ bot. The usual ones:
 | `channels:history` / `groups:history` | Reading public / private channel messages. |
 | `im:history` / `mpim:history` | Reading DMs / group DMs. |
 | `app_mentions:read` | Receiving mentions. |
-| `commands` | The optional `/claudejobs` slash command. |
+| `commands` | Slash commands, if you registered any (step 5). |
 
 **The bot receives nothing**
 
