@@ -381,6 +381,92 @@ def test_slack_permission_check_honours_the_wildcard(monkeypatch):
     assert SlackBot._is_allowed(closed_bot, "U999") is False
 
 
+# --------------------------------------------------------------------------- #
+# Slack: a job started where the bot cannot post must still reach its poster
+# --------------------------------------------------------------------------- #
+class _FakeSlack:
+    """The two Slack Web API calls the delivery path makes."""
+
+    def __init__(self, *, unreachable=(), dm="D-bot"):
+        self.unreachable = set(unreachable)
+        self.dm = dm
+        self.posted = []
+        self.opened = 0
+
+    def conversations_open(self, *, users):
+        self.opened += 1
+        return {"channel": {"id": self.dm}}
+
+    def chat_postMessage(self, *, channel, text, thread_ts=None):
+        from slack_sdk.errors import SlackApiError
+
+        if channel in self.unreachable:
+            raise SlackApiError("failed", {"ok": False, "error": "channel_not_found"})
+        self.posted.append({"channel": channel, "text": text, "thread_ts": thread_ts})
+        return {"ok": True, "ts": "111.222", "message": {}}
+
+
+def _fake_bot(slack, recorded=None):
+    """A SlackBot with only the attributes the delivery path touches."""
+    from types import SimpleNamespace
+
+    from claudejobs.bots.slack_bot import SlackBot
+
+    sent = recorded if recorded is not None else []
+    bot = object.__new__(SlackBot)          # no tokens, no websocket, no API
+    bot.app = SimpleNamespace(client=slack)
+    bot._dm_channels = {}
+    bot.client = SimpleNamespace(
+        outbound_sent=lambda outbound_id, **kwargs: sent.append(kwargs))
+    return bot
+
+
+def test_a_command_typed_in_someone_elses_dm_reports_in_the_bots_dm():
+    """Slack runs slash commands in DMs the bot is not in; it cannot post there."""
+    bot = _fake_bot(_FakeSlack())
+    assert bot._reachable_channel("D05TVP4PPPA", "U1") == "D-bot"
+    assert bot._reachable_channel("D-bot", "U1") == "D-bot"      # already ours
+    assert bot._reachable_channel("C-team", "U1") == "C-team"    # channels stand
+
+
+def test_the_dm_is_looked_up_once_per_user():
+    slack = _FakeSlack()
+    bot = _fake_bot(slack)
+    assert bot._dm_channel("U1") == "D-bot"
+    assert bot._dm_channel("U1") == "D-bot"
+    assert slack.opened == 1
+    assert bot._dm_channel("") is None
+
+
+def test_delivery_falls_back_to_the_dm_when_the_channel_is_unreachable():
+    slack = _FakeSlack(unreachable={"C-team"})
+    recorded = []
+    bot = _fake_bot(slack, recorded)
+    bot._deliver_one({"id": 9, "chat_id": "C-team", "user_id": "U1",
+                      "body": "job #4 finished", "thread_id": None})
+
+    assert len(slack.posted) == 1
+    sent = slack.posted[0]
+    assert sent["channel"] == "D-bot"
+    assert "job #4 finished" in sent["text"]
+    assert "<#C-team>" in sent["text"]              # says where it should have gone
+    assert recorded[0]["chat_id"] == "D-bot"        # and where replies will arrive
+
+
+def test_delivery_gives_up_when_even_the_dm_is_unreachable():
+    from types import SimpleNamespace
+
+    slack = _FakeSlack(unreachable={"C-team", "D-bot"})
+    failures = []
+    bot = _fake_bot(slack)
+    bot.client = SimpleNamespace(
+        outbound_failed=lambda outbound_id, **kwargs: failures.append(outbound_id))
+    bot._deliver_one({"id": 9, "chat_id": "C-team", "user_id": "U1",
+                      "body": "hello", "thread_id": None})
+    assert failures == [9]
+    assert slack.posted == []
+
+
 def test_telegram_requires_an_allowlist(monkeypatch):
     from claudejobs import config
 

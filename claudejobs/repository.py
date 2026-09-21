@@ -637,24 +637,31 @@ def claim_outbound(conn, *, channel: str, claimed_by: str, limit: int = 10) -> l
         SET status = 'claimed', claimed_by = %s, claimed_at = now(), attempts = o.attempts + 1
         FROM picked
         WHERE o.id = picked.id
-        RETURNING o.*
+        RETURNING o.*,
+                  (SELECT j.source_user_id FROM jobs j WHERE j.id = o.job_id) AS user_id
         """,
         (channel, limit, claimed_by),
     ).fetchall()
 
 
 def mark_outbound_sent(conn, outbound_id: int, *, provider_message_id: str | None,
-                       provider_thread_id: str | None = None) -> dict | None:
-    """Record delivery — the provider message id is what routes replies back."""
+                       provider_thread_id: str | None = None,
+                       chat_id: str | None = None) -> dict | None:
+    """Record delivery — the provider message id is what routes replies back.
+
+    ``chat_id`` is for the case where the bot could not post where the job came
+    from and delivered somewhere else: replies arrive in that conversation, so
+    that is the one reply routing has to look in.
+    """
     return conn.execute(
         """
         UPDATE outbound_messages
         SET status = 'sent', sent_at = now(), provider_message_id = %s,
-            provider_thread_id = %s, last_error = NULL
+            provider_thread_id = %s, chat_id = COALESCE(%s, chat_id), last_error = NULL
         WHERE id = %s
         RETURNING *
         """,
-        (provider_message_id, provider_thread_id, outbound_id),
+        (provider_message_id, provider_thread_id, chat_id, outbound_id),
     ).fetchone()
 
 

@@ -131,6 +131,8 @@ class OutboundClaim(BaseModel):
 class OutboundSent(BaseModel):
     provider_message_id: str | None = None
     provider_thread_id: str | None = None
+    #: Where it actually landed, when that is not where it was addressed.
+    chat_id: str | None = None
 
 
 class OutboundFailed(BaseModel):
@@ -593,7 +595,8 @@ def outbound_sent(outbound_id: int, payload: OutboundSent) -> dict:
     with db.connection() as conn:
         row = repo.mark_outbound_sent(conn, outbound_id,
                                       provider_message_id=payload.provider_message_id,
-                                      provider_thread_id=payload.provider_thread_id)
+                                      provider_thread_id=payload.provider_thread_id,
+                                      chat_id=payload.chat_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"no outbound message #{outbound_id}")
     return row

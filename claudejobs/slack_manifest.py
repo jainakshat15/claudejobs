@@ -26,6 +26,8 @@ BOT_SCOPES = [
     "commands",             # slash commands
     "groups:history",       # ... and in private channels it is in
     "im:history",           # ... and in DMs
+    "im:write",             # open a DM with the poster, for jobs started
+                            # somewhere the bot cannot post (see slack_bot.py)
     "mpim:history",         # ... and in group DMs
 ]
 

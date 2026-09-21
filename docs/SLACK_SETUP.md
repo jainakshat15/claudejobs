@@ -46,6 +46,7 @@ Open **Features -> OAuth & Permissions -> Scopes -> Bot Token Scopes** and add:
 | `im:history` | Read direct messages sent to the bot. |
 | `mpim:history` | Read group direct messages the bot is in. |
 | `chat:write` | Post replies, questions and notices (`chat.postMessage`). |
+| `im:write` | Open a DM with whoever started a job, so jobs started where the bot cannot post still reach them (see step 7). |
 | `commands` | Only if you register slash commands (step 5). The generated manifest includes this scope. |
 
 Then:
@@ -236,6 +237,30 @@ Every change to `.env` needs a bot restart — settings are read once at startup
 - **Every reply is posted in a thread** — on the message you typed, or in the
   thread you typed it in.
 
+### Where to type a slash command
+
+Slack will run `/run`, `/jobs` and the rest **anywhere you can type**, including
+conversations the bot is not part of — a DM with a colleague, a channel it was
+never invited to, your own *(you)* notes. The confirmation you get back comes
+from Slack itself, so it appears wherever you typed it; but everything the job
+says afterwards — its questions, its progress, its result — is posted by the bot
+through `chat.postMessage`, and the bot can only post where it is present.
+
+So there are two places a command is fully at home:
+
+| Where | What happens |
+| --- | --- |
+| **A DM with the bot** (search for `claudejobs` → **Messages** tab) | Everything lands here. This is the place for personal, one-off work. |
+| **A channel the bot was invited to** (`/invite @claudejobs`) | Everything lands in the channel, where the team can see it. Give the channel its own working directory with `SLACK_CHANNEL_DIRS` (step 9). |
+
+Typed anywhere else, the bot falls back to **your DM with it** rather than
+losing the job's messages, and says so — once in the confirmation, and again on
+the first message it redirects. Nothing is lost, but the conversation moves, so
+prefer one of the two places above.
+
+Answering a question a job asks you works the same either way: reply in the
+thread it asked in, or use `/reply <job id> <your answer>` from anywhere.
+
 ### Command reference
 
 Every command maps onto one HTTP route, so anything you can do from chat you can
@@ -376,8 +401,21 @@ bot. The usual ones:
 | `chat:write` | Posting replies and questions. |
 | `channels:history` / `groups:history` | Reading public / private channel messages. |
 | `im:history` / `mpim:history` | Reading DMs / group DMs. |
+| `im:write` | Opening a DM with a job's poster (see `channel_not_found` below). |
 | `app_mentions:read` | Receiving mentions. |
 | `commands` | Slash commands, if you registered any (step 5). |
+
+**`channel_not_found` when the bot posts (`could not deliver message #N`)**
+
+The job was started in a conversation the bot is not in — typically a slash
+command typed in a DM with someone else, or in a channel the bot was never
+invited to. Slack runs the command there, but refuses the bot's
+`chat.postMessage`.
+
+The bot handles this by delivering to your DM with it instead, which needs the
+`im:write` scope (step 3) — **add it and reinstall the app** if you are seeing
+this error. To keep a job's messages where you asked for it, type the command in
+your DM with the bot, or `/invite @claudejobs` into the channel first.
 
 **The bot receives nothing**
 

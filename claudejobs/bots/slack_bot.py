@@ -42,7 +42,19 @@ MENTION_RE = re.compile(r"<@[UW][A-Z0-9]+>")
 #: Slack routes only this app's own commands to us, so matching them all is
 #: safe — and means the manifest decides which exist, not this file.
 ANY_SLASH_COMMAND = re.compile(r"^/[A-Za-z0-9_-]+$")
+#: Anything Slack sends that no listener above claims; acked quietly so Bolt
+#: stops logging it as an unhandled 404.
+ANY_EVENT = re.compile(r".+")
 PUBLIC_COMMANDS = {"help", "start", "whoami"}
+
+#: chat.postMessage answers with one of these when the bot is not a member of
+#: the conversation — which is every DM between two other people, and every
+#: channel it was never invited to. Slash commands work there anyway, so a job
+#: can easily be started somewhere its answers cannot be posted.
+UNREACHABLE = {"channel_not_found", "not_in_channel", "is_archived",
+               "channel_is_archived", "user_not_in_channel"}
+#: The thread we meant to reply in has been deleted; post at top level instead.
+THREAD_GONE = {"thread_not_found", "message_not_found"}
 
 
 class SlackBot:
@@ -54,6 +66,8 @@ class SlackBot:
         self.worker_name = f"slack-{self.settings.worker_id}"
         self.app = App(token=self.bot_token, logger=logging.getLogger("slack_bolt"))
         self._stop = threading.Event()
+        #: user id -> the bot's own DM with them, looked up once per process.
+        self._dm_channels: dict[str, str] = {}
         self._register()
 
     # ------------------------------------------------------------------ #
@@ -77,18 +91,29 @@ class SlackBot:
             ack()
             self.on_slash(command, respond)
 
+        # Slack sends more than we subscribe to by name. Acking the rest keeps
+        # "unhandled request" 404s out of the log; the listeners above still run.
+        @self.app.event(ANY_EVENT)
+        def _other(event: dict) -> None:
+            log.debug("ignored %s event", event.get("type"))
+
     def on_slash(self, command: dict, respond) -> None:
         """Handle one slash command, whatever name it was registered under.
 
         Both spellings work: `/claudejobs run fix the tests` puts the command in
         the text, while `/run fix the tests` puts it in the command name.
         """
+        origin = str(command.get("channel_id") or "")
+        user_id = str(command.get("user_id") or "")
+        # Slash commands work in any conversation, including DMs the bot is not
+        # part of; a job started there must still be able to reach its poster.
+        chat_id = self._reachable_channel(origin, user_id)
         ctx = ChatContext(
             channel="slack",
-            chat_id=str(command.get("channel_id")),
-            user_id=str(command.get("user_id")),
-            username=command.get("user_name") or str(command.get("user_id")),
-            default_directory=self._default_dir(str(command.get("channel_id"))),
+            chat_id=chat_id,
+            user_id=user_id,
+            username=command.get("user_name") or user_id,
+            default_directory=self._default_dir(origin),
         )
         raw = str(command.get("command") or "")
         text = (command.get("text") or "").strip()
@@ -106,9 +131,48 @@ class SlackBot:
         if parsed[0] not in PUBLIC_COMMANDS and not self._is_allowed(ctx.user_id):
             respond(self._refusal())
             return
-        respond(handle_command(parsed[0], parsed[1], ctx, self.client))
+        reply = handle_command(parsed[0], parsed[1], ctx, self.client)
+        if chat_id != origin:
+            reply += ("\n\n_This conversation is not one I can post in, so this "
+                      "job's questions and results will arrive in our DM._")
+        respond(reply)
 
     # ------------------------------------------------------------------ #
+    def _reachable_channel(self, channel_id: str, user_id: str) -> str:
+        """The conversation a job started here should post its answers in.
+
+        Slack runs a slash command wherever it is typed — including a DM
+        between two other people, or a DM with another app. The bot is not a
+        member of those, so `chat.postMessage` answers `channel_not_found` and
+        every question the job asks is lost. Their DM with the bot is the one
+        conversation it can always reach, so that is where those jobs report.
+
+        Channels and group DMs are left alone: the bot may simply need an
+        invite, and `_deliver_one` falls back to the DM if it never gets one.
+        """
+        if not channel_id.startswith("D"):
+            return channel_id
+        return self._dm_channel(user_id) or channel_id
+
+    def _dm_channel(self, user_id: str) -> str | None:
+        """The bot's own DM with this user, opening it on first use."""
+        if not user_id:
+            return None
+        known = self._dm_channels.get(user_id)
+        if known:
+            return known
+        try:
+            response = self.app.client.conversations_open(users=user_id)
+        except SlackApiError as exc:
+            # Missing im:write is the usual cause — see docs/SLACK_SETUP.md.
+            log.error("could not open a DM with %s: %s", user_id,
+                      exc.response.get("error", exc))
+            return None
+        channel_id = str(response.get("channel", {}).get("id") or "")
+        if channel_id:
+            self._dm_channels[user_id] = channel_id
+        return channel_id or None
+
     def _default_dir(self, channel_id: str) -> str | None:
         return self.settings.slack_channel_dirs.get(channel_id) or self.settings.default_directory or None
 
@@ -189,29 +253,49 @@ class SlackBot:
     def _deliver_one(self, row: dict[str, Any]) -> None:
         # Keep every message about a job in the thread of the original request.
         thread_ts = row.get("thread_id") or row.get("reply_to_message_id")
-        try:
-            response = self.app.client.chat_postMessage(
-                channel=row["chat_id"], text=row["body"], thread_ts=thread_ts)
-        except SlackApiError as exc:
-            error = exc.response.get("error", str(exc))
-            if error in {"thread_not_found", "message_not_found"} and thread_ts:
-                try:
-                    response = self.app.client.chat_postMessage(
-                        channel=row["chat_id"], text=row["body"])
-                except SlackApiError as retry_exc:
-                    self._delivery_failed(row, retry_exc)
-                    return
-            else:
-                self._delivery_failed(row, exc)
-                return
+        # Each attempt is a strictly smaller claim than the one before — drop
+        # the thread, then drop the channel — so this loop always terminates.
+        attempts = [(str(row["chat_id"]), thread_ts, row["body"])]
+        last_error: Exception | None = None
 
-        ts = response.get("ts")
-        try:
-            self.client.outbound_sent(
-                row["id"], provider_message_id=str(ts),
-                provider_thread_id=str(response.get("message", {}).get("thread_ts") or thread_ts or ts))
-        except ApiError as exc:
-            log.error("delivered message #%s but could not record it: %s", row["id"], exc)
+        while attempts:
+            channel, thread, body = attempts.pop(0)
+            try:
+                response = self.app.client.chat_postMessage(
+                    channel=channel, text=body, thread_ts=thread)
+            except SlackApiError as exc:
+                last_error = exc
+                error = exc.response.get("error", str(exc))
+                if error in THREAD_GONE and thread:
+                    attempts.append((channel, None, body))
+                elif error in UNREACHABLE:
+                    fallback = self._dm_channel(str(row.get("user_id") or ""))
+                    if fallback and fallback != channel:
+                        log.warning("message #%s: cannot post in %s (%s); "
+                                    "sending it to the poster's DM instead",
+                                    row["id"], channel, error)
+                        attempts.append((fallback, None, self._redirect_note(channel) + body))
+                continue
+
+            ts = response.get("ts")
+            try:
+                self.client.outbound_sent(
+                    row["id"], provider_message_id=str(ts),
+                    provider_thread_id=str(response.get("message", {}).get("thread_ts")
+                                           or thread or ts),
+                    chat_id=channel)
+            except ApiError as exc:
+                log.error("delivered message #%s but could not record it: %s", row["id"], exc)
+            return
+
+        self._delivery_failed(row, last_error or RuntimeError("no delivery attempt succeeded"))
+
+    @staticmethod
+    def _redirect_note(channel: str) -> str:
+        """One line explaining why this landed in the DM and not where it was asked."""
+        where = f"in <#{channel}>" if channel.startswith(("C", "G")) else "where you asked"
+        invite = " — invite me there with `/invite @claudejobs`" if where.startswith("in") else ""
+        return f"_I could not post this {where}{invite}._\n\n"
 
     def _delivery_failed(self, row: dict[str, Any], exc: Exception) -> None:
         log.error("could not deliver message #%s to %s: %s", row["id"], row["chat_id"], exc)

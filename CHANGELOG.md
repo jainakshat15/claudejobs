@@ -25,6 +25,19 @@ Notable changes to this project. Format follows
   font both Telegram and Slack render. The HTTP route column moved to
   `docs/API.md`, where it was already documented.
 
+### Fixed
+
+- **Slash commands typed outside the bot's reach.** Slack runs a slash command
+  wherever it is typed, including DMs between two other people and channels the
+  bot was never invited to — but the bot cannot post there, so every question
+  and result the job produced died as `channel_not_found`, retried five times
+  and was dropped. A command typed in a DM now reports in the poster's DM with
+  the bot, and delivery to any unreachable conversation falls back to that DM
+  with a line saying where it should have gone. Needs the new `im:write` scope:
+  update the app from `deploy/slack-app-manifest.yml` and reinstall it.
+- **Unhandled Slack events** are acked quietly instead of being logged as
+  `unhandled request` 404s.
+
 ## [1.0.0] — 2026-09-20
 
 First release.

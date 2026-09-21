@@ -153,10 +153,12 @@ class AdminClient(_BaseClient):
                             json={"channel": channel, "claimed_by": claimed_by, "limit": limit})
 
     def outbound_sent(self, outbound_id: int, *, provider_message_id: str | None,
-                      provider_thread_id: str | None = None) -> dict:
+                      provider_thread_id: str | None = None,
+                      chat_id: str | None = None) -> dict:
         return self.request("POST", f"/outbound/{outbound_id}/sent",
                             json={"provider_message_id": provider_message_id,
-                                  "provider_thread_id": provider_thread_id})
+                                  "provider_thread_id": provider_thread_id,
+                                  "chat_id": chat_id})
 
     def outbound_failed(self, outbound_id: int, *, error: str) -> dict:
         return self.request("POST", f"/outbound/{outbound_id}/failed", json={"error": error})

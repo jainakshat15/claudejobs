@@ -93,6 +93,7 @@ oauth_config:
       - "commands"
       - "groups:history"
       - "im:history"
+      - "im:write"
       - "mpim:history"
 settings:
   event_subscriptions:
