@@ -8,13 +8,22 @@ Notable changes to this project. Format follows
 
 ### Added
 
-- **`/ask-sales-bot <question>`** — a read-only question about the Sales Bot
-  product. It queues a job that reads the product's source (`SALES_BOT_CODE_DIR`,
-  the flexi-demo repository) and its user-facing documentation
-  (`SALES_BOT_DOCS_DIR`, `docs/Sales-Bot`), then reports the answer back to the
-  chat the question came from. Both paths default to siblings of this checkout;
-  the job runs in the nearest directory holding both, ahead of ordinary work
-  jobs, and is told to change nothing.
+- **Product questions** — `/ask-sales-bot <question>` and `/ask-od <question>`.
+  Each queues a read-only job that reads the two places its product is
+  described: the repository that decides what it does (`<PRODUCT>_CODE_DIR`) and
+  the documentation tree describing what it promises (`<PRODUCT>_DOCS_DIR`). The
+  answer is reported back to the chat the question came from. Both paths default
+  to siblings of this checkout; the job runs in the nearest directory holding
+  both, ahead of ordinary work jobs, and is told to change nothing. Products are
+  entries in `CATALOGUE` in `claudejobs/products.py`; `/ask` on its own lists
+  them.
+
+### Changed
+
+- **`/help` is written for a chat window**, not a terminal: grouped sections,
+  one command per line, and no column alignment to collapse in the proportional
+  font both Telegram and Slack render. The HTTP route column moved to
+  `docs/API.md`, where it was already documented.
 
 ## [1.0.0] — 2026-09-20
 

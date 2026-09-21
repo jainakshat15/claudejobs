@@ -99,6 +99,7 @@ phone you can also do with curl or the CLI.
 | --- | --- | --- |
 | `/run <prompt>` | `claudejobs submit "<prompt>" --dir PATH` | `POST /jobs` |
 | `/ask-sales-bot <question>` | — | `POST /jobs` |
+| `/ask-od <question>` | — | `POST /jobs` |
 | `/jobs [status]` | `claudejobs jobs --status active` | `GET /jobs` |
 | `/status <id>` | `claudejobs status <id>` | `GET /jobs/{id}` |
 | `/cancel <id>` | `claudejobs cancel <id>` | `POST /jobs/{id}/cancel` |

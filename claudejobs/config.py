@@ -15,11 +15,13 @@ import json
 import logging
 import os
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from . import products
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS_DIR = REPO_ROOT / "migrations"
@@ -91,8 +93,8 @@ def _roots(name: str) -> list[Path]:
 def _sibling(name: str, default: str) -> Path:
     """A directory setting whose relative default sits next to this checkout.
 
-    The Sales Bot sources (the flexi-demo repository, the documentation tree)
-    are separate checkouts kept alongside claudejobs, not inside it.
+    The product sources (a product's repository, its documentation tree) are
+    separate checkouts kept alongside claudejobs, not inside it.
     """
     raw = _str(name, default)
     path = Path(raw).expanduser()
@@ -148,11 +150,8 @@ class Settings:
     allowed_roots: list[Path]
     default_directory: str
 
-    # /ask-sales-bot
-    sales_bot_code_dir: Path
-    sales_bot_docs_dir: Path
-    sales_bot_directory: str
-    sales_bot_timeout_minutes: int
+    # products a chat question can be asked about (/ask-sales-bot, /ask-od)
+    products: tuple[products.Product, ...]
 
     # bots
     telegram_bot_token: str
@@ -209,22 +208,51 @@ class Settings:
             )
         return self.slack_bot_token, self.slack_app_token, self.slack_allowed_users
 
-    def require_sales_bot(self) -> tuple[Path, Path, str]:
-        """The two directories /ask-sales-bot reads, and where its job runs."""
-        for name, path, what in (
-            ("SALES_BOT_CODE_DIR", self.sales_bot_code_dir, "source lives"),
-            ("SALES_BOT_DOCS_DIR", self.sales_bot_docs_dir, "documentation lives"),
+    def require_product(self, key: str) -> products.Product:
+        """One configured product, with both of its directories checked."""
+        product = next((p for p in self.products if p.key == key), None)
+        if product is None:
+            raise ConfigError(f"no product named {key!r} is configured")
+        for suffix, path, what in (
+            ("CODE_DIR", product.code_dir, "source lives"),
+            ("DOCS_DIR", product.docs_dir, "documentation lives"),
         ):
             if not path.is_dir():
                 raise ConfigError(
                     f"{path} is not a directory, so there is nothing for "
-                    f"/ask-sales-bot to read. Set {name} in .env to where the "
-                    f"Sales Bot {what}."
+                    f"/{product.command.replace('_', '-')} to read. Set "
+                    f"{product.env_prefix}_{suffix} in .env to where the "
+                    f"{product.name} {what}."
                 )
-        return self.sales_bot_code_dir, self.sales_bot_docs_dir, self.sales_bot_directory
+        return product
 
     def job_log_path(self, job_id: int) -> Path:
         return self.log_dir / f"job-{job_id}.log"
+
+
+def _products() -> tuple[products.Product, ...]:
+    """Resolve every catalogue entry against the environment.
+
+    Each product reads <PREFIX>_CODE_DIR, <PREFIX>_DOCS_DIR, <PREFIX>_DIRECTORY
+    and <PREFIX>_TIMEOUT_MINUTES — SALES_BOT_CODE_DIR, OD_CODE_DIR and so on.
+    """
+    resolved = []
+    for product in products.CATALOGUE:
+        prefix = product.env_prefix
+        code_dir = _sibling(f"{prefix}_CODE_DIR", str(product.code_dir))
+        docs_dir = _sibling(f"{prefix}_DOCS_DIR", str(product.docs_dir))
+        resolved.append(replace(
+            product,
+            code_dir=code_dir,
+            docs_dir=docs_dir,
+            # A job has to read both, so it runs where the two meet unless it
+            # is sent somewhere explicitly.
+            directory=(_str(f"{prefix}_DIRECTORY")
+                       or _common_parent(code_dir, docs_dir)),
+            timeout_minutes=max(1, _int(f"{prefix}_TIMEOUT_MINUTES",
+                                        product.timeout_minutes)),
+        ))
+    return tuple(resolved)
 
 
 def load_settings() -> Settings:
@@ -240,9 +268,6 @@ def load_settings() -> Settings:
             f"HEARTBEAT_INTERVAL_SECONDS ({heartbeat}), otherwise healthy jobs "
             "get reaped between heartbeats. Aim for at least 3x."
         )
-
-    sales_bot_code_dir = _sibling("SALES_BOT_CODE_DIR", "flexi-demo")
-    sales_bot_docs_dir = _sibling("SALES_BOT_DOCS_DIR", "docs/Sales-Bot")
 
     return Settings(
         database_url=_str("DATABASE_URL"),
@@ -272,13 +297,7 @@ def load_settings() -> Settings:
         log_level=_str("LOG_LEVEL", "INFO").upper(),
         allowed_roots=_roots("ALLOWED_ROOTS"),
         default_directory=_str("DEFAULT_DIRECTORY"),
-        sales_bot_code_dir=sales_bot_code_dir,
-        sales_bot_docs_dir=sales_bot_docs_dir,
-        # Both sources have to be readable from the job's working directory, so
-        # it defaults to the nearest directory that holds them both.
-        sales_bot_directory=(_str("SALES_BOT_DIRECTORY")
-                             or _common_parent(sales_bot_code_dir, sales_bot_docs_dir)),
-        sales_bot_timeout_minutes=max(1, _int("SALES_BOT_TIMEOUT_MINUTES", 20)),
+        products=_products(),
         telegram_bot_token=_str("TELEGRAM_BOT_TOKEN"),
         telegram_allowed_users={int(u) for u in _csv("TELEGRAM_ALLOWED_USERS") if u.lstrip("-").isdigit()},
         telegram_chat_dirs=_json_dict("TELEGRAM_CHAT_DIRS"),

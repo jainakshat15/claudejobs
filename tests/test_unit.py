@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from claudejobs import ask_sales_bot, config, models, request_log
+from claudejobs import config, models, products, request_log
 from claudejobs.bots.common import (
     ASSIGNMENT_RE,
     COMMANDS,
@@ -16,7 +16,8 @@ from claudejobs.bots.common import (
     RUN_OPTIONS,
     ChatContext,
     _pop_options,
-    cmd_ask_sales_bot,
+    cmd_ask_product,
+    cmd_ask_which,
     parse_message,
 )
 from claudejobs.prompt import build_job_instructions
@@ -35,6 +36,7 @@ from claudejobs.prompt import build_job_instructions
     ("/ask-sales-bot how is a call scored?", ("ask_sales_bot", "how is a call scored?")),
     ("ask-sales-bot what is a persona", ("ask_sales_bot", "what is a persona")),
     ("/ask-sales-bot@claudejobs_bot hi", ("ask_sales_bot", "hi")),
+    ("/ask-od how do journey cycles work", ("ask_od", "how do journey cycles work")),
     ("just a sentence", None),
     ("", None),
     ("yes please", None),                                       # an answer, not a command
@@ -82,7 +84,7 @@ def test_every_command_name_is_one_telegram_will_register():
 
 
 # --------------------------------------------------------------------------- #
-# /ask-sales-bot
+# product questions
 # --------------------------------------------------------------------------- #
 def _ctx(**overrides) -> ChatContext:
     fields = {"channel": "telegram", "chat_id": "-100", "user_id": "7",
@@ -91,35 +93,73 @@ def _ctx(**overrides) -> ChatContext:
     return ChatContext(**fields)
 
 
-def test_sales_bot_job_points_at_both_sources(tmp_path):
-    code, docs = tmp_path / "flexi-demo", tmp_path / "docs" / "Sales-Bot"
-    job = ask_sales_bot.build_job("how is a call scored?", code_dir=code, docs_dir=docs,
-                                  directory=str(tmp_path), asked_by="akshat",
-                                  timeout_minutes=20)
+def _product(key: str, tmp_path, **overrides) -> products.Product:
+    """A catalogue entry pointed at throwaway directories."""
+    from dataclasses import replace
 
-    assert "how is a call scored?" in job["prompt"]
-    assert str(code) in job["prompt"] and str(docs) in job["prompt"]
-    assert "jobctl done" in job["prompt"]          # the answer goes back to the asker
-    assert str(ask_sales_bot.ANSWER_BUDGET) in job["prompt"]
-    assert job["title"] == "Sales Bot: how is a call scored?"
+    code, docs = tmp_path / "code", tmp_path / "docs"
+    code.mkdir(exist_ok=True)
+    docs.mkdir(exist_ok=True)
+    base = products.find(key)
+    return replace(base, code_dir=code, docs_dir=docs, directory=str(tmp_path),
+                   **overrides)
+
+
+def test_catalogue_covers_both_products():
+    assert [p.key for p in products.CATALOGUE] == ["sales-bot", "od"]
+    assert products.find("od").command == "ask_od"
+    assert products.find("sales-bot").env_prefix == "SALES_BOT"
+    assert products.find("od").env_prefix == "OD"
+    # every name is unique, or one product would shadow another
+    names = [name for p in products.CATALOGUE for name in p.names]
+    assert len(names) == len(set(names))
+
+
+@pytest.mark.parametrize("key, name", [("sales-bot", "Sales Bot"),
+                                       ("od", "Organizational Development")])
+def test_product_job_points_at_that_product_s_sources(key, name, tmp_path):
+    product = _product(key, tmp_path)
+    job = products.build_job(product, "how is it scored?", asked_by="akshat")
+
+    assert "how is it scored?" in job["prompt"]
+    assert str(product.code_dir) in job["prompt"]
+    assert str(product.docs_dir) in job["prompt"]
+    assert product.code_hint in job["prompt"]      # how to navigate that repo
+    assert "jobctl done" in job["prompt"]          # the answer goes to the asker
+    assert str(products.ANSWER_BUDGET) in job["prompt"]
+    assert job["title"] == f"{name}: how is it scored?"
     assert job["directory"] == str(tmp_path)
-    assert job["priority"] == ask_sales_bot.PRIORITY
-    assert job["timeout_minutes"] == 20
-    assert job["payload"] == {"kind": "ask-sales-bot", "question": "how is a call scored?"}
+    assert job["priority"] == products.PRIORITY
+    assert job["payload"] == {"kind": f"ask-{key}", "question": "how is it scored?"}
     assert "read-only" in job["append_system_prompt"]
 
 
-def test_sales_bot_command_asks_for_a_question_when_given_none():
-    reply = cmd_ask_sales_bot(None, _ctx(), "   ")
-    assert "Usage: /ask-sales-bot" in reply
+def test_question_command_asks_for_a_question_when_given_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("OD_CODE_DIR", str(tmp_path / "code"))
+    monkeypatch.setenv("OD_DOCS_DIR", str(tmp_path / "docs"))
+    (tmp_path / "code").mkdir()
+    (tmp_path / "docs").mkdir()
+    config.get_settings.cache_clear()
+    try:
+        reply = cmd_ask_product(None, _ctx(), "   ", key="od")
+    finally:
+        config.get_settings.cache_clear()
+    assert "Usage: /ask-od" in reply
+    assert products.find("od").example in reply
 
 
-def test_sales_bot_command_sends_the_chat_origin_with_the_job(monkeypatch, tmp_path):
-    code, docs = tmp_path / "flexi-demo", tmp_path / "docs" / "Sales-Bot"
+def test_ask_without_a_product_lists_them():
+    reply = cmd_ask_which(None, _ctx(), "how is it scored?")
+    assert "/ask_sales_bot" in reply and "/ask_od" in reply
+    assert "how is it scored?" in reply      # the question isn't thrown away
+
+
+def test_question_command_sends_the_chat_origin_with_the_job(monkeypatch, tmp_path):
+    code, docs = tmp_path / "OD", tmp_path / "docs"
     code.mkdir()
-    docs.mkdir(parents=True)
-    monkeypatch.setenv("SALES_BOT_CODE_DIR", str(code))
-    monkeypatch.setenv("SALES_BOT_DOCS_DIR", str(docs))
+    docs.mkdir()
+    monkeypatch.setenv("OD_CODE_DIR", str(code))
+    monkeypatch.setenv("OD_DOCS_DIR", str(docs))
     config.get_settings.cache_clear()
 
     sent = {}
@@ -130,11 +170,12 @@ def test_sales_bot_command_sends_the_chat_origin_with_the_job(monkeypatch, tmp_p
             return {"id": 42, "title": payload["title"], "directory": payload["directory"]}
 
     try:
-        reply = cmd_ask_sales_bot(FakeClient(), _ctx(), "how is a call scored?")
+        reply = cmd_ask_product(FakeClient(), _ctx(), "how do cycles work?", key="od")
     finally:
         config.get_settings.cache_clear()
 
     assert "#42" in reply
+    assert sent["title"].startswith("Organizational Development:")
     assert sent["source"] == "telegram"
     assert sent["source_chat_id"] == "-100"      # the answer comes back here
     assert sent["source_message_id"] == "55"
@@ -142,23 +183,36 @@ def test_sales_bot_command_sends_the_chat_origin_with_the_job(monkeypatch, tmp_p
     assert Path(sent["directory"]) == tmp_path   # holds both sources
 
 
-def test_sales_bot_directories_default_to_siblings_of_the_checkout(monkeypatch):
-    for name in ("SALES_BOT_CODE_DIR", "SALES_BOT_DOCS_DIR", "SALES_BOT_DIRECTORY"):
-        monkeypatch.delenv(name, raising=False)
-    settings = config.load_settings()
+def test_product_directories_default_to_siblings_of_the_checkout(monkeypatch):
+    for prefix in ("SALES_BOT", "OD"):
+        for suffix in ("CODE_DIR", "DOCS_DIR", "DIRECTORY"):
+            monkeypatch.delenv(f"{prefix}_{suffix}", raising=False)
     parent = config.REPO_ROOT.parent
+    configured = {p.key: p for p in config.load_settings().products}
 
-    assert settings.sales_bot_code_dir == (parent / "flexi-demo").resolve()
-    assert settings.sales_bot_docs_dir == (parent / "docs" / "Sales-Bot").resolve()
-    # the job has to read both, so it runs where the two meet
-    assert Path(settings.sales_bot_directory) == parent.resolve()
+    assert configured["sales-bot"].code_dir == (parent / "flexi-demo").resolve()
+    assert configured["sales-bot"].docs_dir == (parent / "docs" / "Sales-Bot").resolve()
+    assert configured["od"].code_dir == (parent / "OD").resolve()
+    assert configured["od"].docs_dir == (parent / "docs" / "Organizational-Development").resolve()
+    # a job has to read both, so it runs where the two meet
+    assert all(Path(p.directory) == parent.resolve() for p in configured.values())
 
 
-def test_missing_sales_bot_source_is_reported_by_name(monkeypatch, tmp_path):
-    monkeypatch.setenv("SALES_BOT_CODE_DIR", str(tmp_path / "not-here"))
+def test_product_directories_are_overridable(monkeypatch, tmp_path):
+    monkeypatch.setenv("OD_CODE_DIR", str(tmp_path / "elsewhere"))
+    monkeypatch.setenv("OD_TIMEOUT_MINUTES", "45")
+    configured = {p.key: p for p in config.load_settings().products}
+
+    assert configured["od"].code_dir == (tmp_path / "elsewhere").resolve()
+    assert configured["od"].timeout_minutes == 45
+    assert configured["sales-bot"].timeout_minutes == products.DEFAULT_TIMEOUT_MINUTES
+
+
+def test_missing_product_source_is_reported_by_name(monkeypatch, tmp_path):
+    monkeypatch.setenv("OD_CODE_DIR", str(tmp_path / "not-here"))
     settings = config.load_settings()
-    with pytest.raises(config.ConfigError, match="SALES_BOT_CODE_DIR"):
-        settings.require_sales_bot()
+    with pytest.raises(config.ConfigError, match="OD_CODE_DIR"):
+        settings.require_product("od")
 
 
 # --------------------------------------------------------------------------- #

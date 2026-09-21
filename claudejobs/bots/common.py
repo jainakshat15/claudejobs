@@ -13,9 +13,10 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable
 
-from .. import ask_sales_bot, models
+from .. import models, products
 from ..client import AdminClient, ApiError
 from ..config import ConfigError, get_settings
 
@@ -57,7 +58,18 @@ class ChatContext:
     default_directory: str | None = None
 
 
-HELP = """claudejobs — run Claude Code sessions from chat
+def _ask_help() -> str:
+    """The question commands, one block per product in the catalogue."""
+    return "\n\n".join(
+        f"/{product.command} <question>\n"
+        f"  Ask about {product.name}. Reads its code and its docs,\n"
+        f"  then answers here. Changes nothing. Example:\n"
+        f"  /{product.command} {product.example}"
+        for product in products.CATALOGUE
+    )
+
+
+HELP = f"""claudejobs — run Claude Code sessions from chat
 
 Tap a command or type it. <angle brackets> are yours to fill in.
 
@@ -75,10 +87,7 @@ Tap a command or type it. <angle brackets> are yours to fill in.
   title:"short name"
   Example: /run dir:D:\\work\\api prio:10 fix the auth tests
 
-/ask_sales_bot <question>
-  Ask about the Sales Bot product. Reads the flexi-demo repo and the
-  Sales Bot docs, then answers here. Changes nothing. Example:
-  /ask_sales_bot how does a rep get scored on a call?
+{_ask_help()}
 
 ━ SEE WHAT IS HAPPENING ━
 
@@ -202,27 +211,23 @@ def cmd_run(client: AdminClient, ctx: ChatContext, args: str) -> str:
             f"Track it with /status {job['id']}")
 
 
-def cmd_ask_sales_bot(client: AdminClient, ctx: ChatContext, args: str) -> str:
-    """Queue a read-only question about the Sales Bot product.
+def cmd_ask_product(client: AdminClient, ctx: ChatContext, args: str, *,
+                    key: str) -> str:
+    """Queue a read-only question about one product.
 
     Unlike /run this takes no options: the question is the whole argument, and
     the two directories it reads are configuration rather than something a chat
     message gets to choose.
     """
+    product = get_settings().require_product(key)
     question = args.strip()
     if not question:
-        return ("Ask me something about Sales Bot.\n"
-                "Usage: /ask-sales-bot <question>\n"
-                "example: /ask-sales-bot how does a rep get scored on a call?")
+        command = product.command.replace("_", "-")
+        return (f"Ask me something about {product.name}.\n"
+                f"Usage: /{command} <question>\n"
+                f"example: /{command} {product.example}")
 
-    settings = get_settings()
-    code_dir, docs_dir, directory = settings.require_sales_bot()
-    payload = ask_sales_bot.build_job(
-        question,
-        code_dir=code_dir, docs_dir=docs_dir, directory=directory,
-        asked_by=ctx.username,
-        timeout_minutes=settings.sales_bot_timeout_minutes,
-    )
+    payload = products.build_job(product, question, asked_by=ctx.username)
     payload.update({
         "source": ctx.channel,
         "source_user_id": ctx.user_id,
@@ -235,9 +240,23 @@ def cmd_ask_sales_bot(client: AdminClient, ctx: ChatContext, args: str) -> str:
 
     job = client.create_job(**payload)
     return (f"🔎 Looking into that — job #{job['id']}.\n"
-            f"Reading {code_dir} and {docs_dir}; the answer comes back here when "
-            f"it's ready.\n\n"
+            f"Reading {product.code_dir} and {product.docs_dir}; the answer comes "
+            f"back here when it's ready.\n\n"
             f"Track it with /status {job['id']}")
+
+
+def cmd_ask_which(client: AdminClient, ctx: ChatContext, args: str) -> str:
+    """`/ask` on its own: name the product, since there is more than one.
+
+    Telegram cuts a typed "/ask-sales-bot ..." down to the "/ask" entity, so
+    this is also where a client that sends only that entity ends up.
+    """
+    lines = ["Ask about which product?", ""]
+    lines += [f"/{product.command} <question> — {product.name}"
+              for product in products.CATALOGUE]
+    if args.strip():
+        lines += ["", f"(your question was: {models.short(args, 80)})"]
+    return "\n".join(lines)
 
 
 def cmd_jobs(client: AdminClient, ctx: ChatContext, args: str) -> str:
@@ -383,10 +402,10 @@ COMMANDS: dict[str, Callable[[AdminClient, ChatContext, str], str]] = {
     "help": cmd_help, "start": cmd_help,
     "run": cmd_run, "new": cmd_run,
     # Telegram's command entity stops at the first hyphen, so a typed
-    # "/ask-sales-bot ..." arrives as "/ask"; parse_message recovers the full
-    # name from the message text, and "ask" on its own is a usable shorthand.
-    "ask_sales_bot": cmd_ask_sales_bot, "sales_bot": cmd_ask_sales_bot,
-    "salesbot": cmd_ask_sales_bot, "ask": cmd_ask_sales_bot,
+    # "/ask-sales-bot ..." arrives as "/ask" and that name has to be registered
+    # for the bot to see the message at all; parse_message then recovers the
+    # full name from the text. "/ask" alone asks which product is meant.
+    "ask": cmd_ask_which,
     "jobs": cmd_jobs, "list": cmd_jobs, "queue": cmd_jobs,
     "status": cmd_status, "job": cmd_status,
     "cancel": cmd_cancel, "stop": cmd_cancel,
@@ -400,6 +419,12 @@ COMMANDS: dict[str, Callable[[AdminClient, ChatContext, str], str]] = {
     "health": cmd_health,
     "whoami": cmd_whoami,
 }
+
+
+# One command per product in the catalogue, under its name and its aliases.
+for _product in products.CATALOGUE:
+    for _name in _product.names:
+        COMMANDS[_name] = partial(cmd_ask_product, key=_product.key)
 
 
 def handle_command(command: str, args: str, ctx: ChatContext,
