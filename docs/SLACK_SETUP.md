@@ -382,6 +382,21 @@ The channel id is the `chat id` line from `whoami`, asked in that channel. A
 
 ## 10. Troubleshooting
 
+**"… has turned off direct messaging, so you won't be able to respond to these
+messages."**
+
+Slack shows this in the bot's DM when the app's **Messages tab** is off. Nobody
+can message it directly — which also means they cannot answer a job's question
+in a DM. Turn it on:
+
+**Features -> App Home -> Show Tabs -> Messages Tab** on, and tick **"Allow
+users to send Slash commands and messages from the messages tab"**.
+
+The generated manifest sets both (`features.app_home.messages_tab_enabled: true`
+and `messages_tab_read_only_enabled: false`), so pasting it fixes this too. No
+reinstall is needed for this change; new DMs work immediately, though an already
+open DM may need reopening to lose the banner.
+
 **`invalid_auth`**
 
 The bot token is wrong, was revoked, or belongs to a different workspace. Copy

@@ -87,6 +87,9 @@ def test_manifest_is_valid_yaml_with_the_fields_slack_needs():
     assert manifest["display_information"]["name"]
     assert len(manifest["display_information"]["description"]) <= 140   # Slack's limit
     assert manifest["settings"]["socket_mode_enabled"] is True
+    # Without these two, Slack refuses to let anyone DM the bot.
+    assert manifest["features"]["app_home"]["messages_tab_enabled"] is True
+    assert manifest["features"]["app_home"]["messages_tab_read_only_enabled"] is False
     assert "commands" in manifest["oauth_config"]["scopes"]["bot"]
     assert "chat:write" in manifest["oauth_config"]["scopes"]["bot"]
     assert "message.im" in manifest["settings"]["event_subscriptions"]["bot_events"]

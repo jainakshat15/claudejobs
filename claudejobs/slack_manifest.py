@@ -49,6 +49,14 @@ def build_manifest(*, app_name: str = "claudejobs", prefix: str = "") -> dict[st
             "description": DESCRIPTION,
         },
         "features": {
+            # Without the messages tab, Slack tells anyone who opens a DM that
+            # the app "has turned off direct messaging" — and a DM is where a
+            # job's questions and answers are easiest to keep track of.
+            "app_home": {
+                "home_tab_enabled": False,
+                "messages_tab_enabled": True,
+                "messages_tab_read_only_enabled": False,
+            },
             "bot_user": {
                 "display_name": app_name,
                 "always_online": True,
